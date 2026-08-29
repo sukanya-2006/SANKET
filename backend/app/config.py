@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
-    rubric_version: str = "1.0"
+    rubric_version: str = "2.0"
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -1,184 +1,290 @@
-# SIF Precursor Classification Rubric v1.0
+# SIF Precursor Classification Rubric v2.0
 
-**Owner:** Member 1 · **Status:** Phase 1 deliverable · **Used by:** Member 1 + Member 3 (independent labeling, Phase 2)
+**Owner:** Member 1 · **Annotators:** Member 1 + Member 3, independently · **Tiebreak:** Member 6
 
-> Label using **this document only**. Do not discuss cases with the other annotator until both of you
-> have finished all 180 reports. Disagreements go to Member 6 (tiebreaker).
+Gates and field names are locked by [TECH_STACK.md](TECH_STACK.md) §Ground truth and
+[NAMES.md](../NAMES.md). This document says how to *apply* them. It does not restructure them.
+
+> **Label using this document only.** No discussion with the other annotator until both of you
+> have finished. If the rubric does not answer your question, write the question in `notes` and
+> make your best call — do not ask. The questions you write are the evidence that revises v2.1.
 
 ---
 
 ## 1. What we are detecting
 
-A **SIF precursor** is a situation where a *high-energy hazard* was present and a *direct control* was
-absent, ineffective, or bypassed — such that a **realistic small change in circumstance** would have
-produced a fatality or a life-altering injury.
+A **SIF precursor** is a situation where a high-energy hazard was present and the control meant
+to stop it was not doing its job — such that a small, realistic change in circumstance would have
+killed someone or changed their life permanently.
 
-The key move: **judge the situation, not the outcome.** A worker who fell 6 m onto concrete and walked
-away with a bruise is still a SIF precursor. A worker who cut a finger on a box knife and needed four
-stitches is not, no matter how much it bled.
+**Judge the situation, not the outcome.** A worker who fell 6 m and walked away with a bruise is a
+precursor. A worker who needed four stitches from a box knife is not, however much it bled.
 
 ---
 
-## 2. The three gates
+## 2. What you record for every report
 
-Apply the gates **in order**. A report is a **SIF PRECURSOR** only if **all three are YES**.
+Use these exact names. They are the columns in `gold_labels` and the fields the classifier must
+produce, so a synonym here becomes a bug three files away.
 
-### Gate 1 — High-Energy Present
-
-> Was a hazardous energy source of serious magnitude present in the work situation?
-
-Use the energy-source list. The rough threshold is **1,500 foot-pounds** (~2,000 J) — about the energy
-of a 250 kg object at rest 60 cm above you, or a person falling more than 1.2 m.
-
-| Energy source | Counts as high-energy when… |
+| Field | Values |
 |---|---|
-| **Gravity** | Fall of person >1.2 m; any dropped/suspended/falling object >~7 kg from >1.5 m; collapse of structure, trench, or stacked material |
-| **Motion** | Vehicle or mobile equipment moving >5 km/h; person in the path of moving equipment; heavy swinging or rolling load |
-| **Mechanical** | Rotating/reciprocating machinery, conveyors, augers, presses; stored spring or hydraulic-arm energy |
-| **Electrical** | >50 V AC exposure, any arc-flash-capable panel, overhead or buried power line contact |
-| **Pressure** | Pressurised gas/liquid >~7 bar, steam, hydraulic lines, pressure vessels, uncontrolled release |
-| **Temperature** | Surfaces/liquids >60 °C, molten material, open flame, fire, cryogenic contact |
-| **Chemical** | Toxic-by-inhalation, corrosive, flammable, or asphyxiant atmosphere (incl. oxygen deficiency) |
-| **Biological** | Exposure to a pathogen with serious-illness potential |
-| **Radiation** | Industrial radiography sources, high-power laser |
-
-**NO** if the only energies present are hand tools, low-height slips/trips on the same level, manual
-material handling, ergonomic strain, or minor sharps. Those may be real injuries — they are not
-SIF precursors.
-
-*Uncertain?* If the narrative does not let you name a specific energy source, Gate 1 is **NO**.
+| `hazard_assessment` | `yes` · `no` · `insufficient_information` |
+| `lsr_rule` | one of the eight rules below, or `none` |
+| `control_status` | `absent` · `failed` · `present` · `unclear` (leave blank if Gate 1 is not `yes`) |
+| `severity` | 1–5 |
+| `is_sif_precursor` | true / false — determined by the table in §6, never set by feel |
+| `notes` | one line of rationale; **mandatory** for every `insufficient_information`, every `unclear`, and every call you found hard |
+| `rubric_version` | `2.0` |
 
 ---
 
-### Gate 2 — Direct Control Absent, Ineffective, or Bypassed
+## 3. Gate 1 — Hazard
 
-> Was there a **direct control** in place, and was it actually doing its job at the moment of the event?
+> Is a high-energy hazard present, in one of the eight IOGP Life-Saving Rule categories?
 
-A **direct control** is a safeguard that is (a) specifically targeted at the high-energy hazard from
-Gate 1, (b) effective on its own even when a person makes a mistake, and (c) verifiably in place at
-the time. Examples: a locked-out and verified isolation, a rated fall-arrest system that is actually
-clipped in, a machine guard that is fitted and interlocked, a hard physical barricade, a rated
-crane/rigging setup within its limits, a competent-person-designed trench protective system.
+`no` or `insufficient_information` → **stop. Not a precursor.** Do not fill in Gate 2 or 3.
 
-**Not** direct controls: training, toolbox talks, experience, warning signs, hi-vis clothing, "being
-careful", pre-job briefs, procedures on paper, permits that were signed but not followed, or PPE that
-does not stop the Gate 1 energy (hard hats and gloves do not stop a 6 m fall or 11 kV).
+IOGP Report 459 defines nine rules. **We use eight.** *Bypassing Safety Controls* is deliberately
+excluded, because barrier defeat is exactly what `control_status` measures at Gate 2 — carrying it
+here as well would count the same signal twice. A bypassed control is recorded as
+`control_status = absent`, with `lsr_rule` set to whatever hazard the control was protecting against.
 
-Gate 2 is **YES** (control failed) when the narrative shows any of:
+| `lsr_rule` | Answer `yes` when the report involves… |
+|---|---|
+| `energy_isolation` | Work on or near equipment that should have been isolated and proven dead: electrical systems, stored pressure, stored mechanical or hydraulic energy, live process fluid |
+| `work_at_height` | A person, tool, or material able to fall far enough to kill or maim — scaffolds, derricks, roofs, ladders, open edges, gratings, dropped objects from height |
+| `lifting` | Cranes, hoists, rigging, slings, forklifts, suspended or swinging loads |
+| `line_of_fire` | A person in the path of something moving, energised, or pressurised — vehicles, machinery, released pressure, breaking containment, recoiling lines |
+| `confined_space` | Entry into a tank, vessel, pit, sewer, or any space with restricted egress or a potentially hazardous atmosphere |
+| `hot_work` | Welding, cutting, grinding, or any ignition source where flammables may be present |
+| `driving` | Operating a vehicle on site or public road, including passenger exposure |
+| `permit_to_work` | Work that required an authorisation which was not raised, not valid, or not followed — used when no other category names the hazard better |
 
-- No direct control existed for that energy.
-- A control existed but was **removed, bypassed, defeated, or disabled** (guard off, interlock jumped,
-  lock cut, alarm muted).
-- A control existed but was **not used** (harness worn but not clipped; LOTO not applied; barricade
-  not set).
-- A control was **present but inadequate or failed** (wrong-rated sling, un-shored trench, isolation
-  not verified de-energised, anchor point failed).
+**One report, one rule.** If several apply, pick the one carrying the greatest potential to kill.
+Name the tie-break you used in `notes`.
 
-Gate 2 is **NO** when a rated, targeted control was in place and functioning, and the event stayed
-inside the protection it provides (e.g. worker fell but was arrested by a correctly rigged harness at
-a correct anchor — *if* the narrative says so explicitly).
+### Answer `no` when
 
-**Cross-check against the IOGP Life-Saving Rules.** IOGP Report 459 defines nine rules; **we use
-eight**. "Bypassing Safety Controls" is deliberately excluded — barrier defeat is precisely what
-Gate 2 measures, so carrying it as a hazard category as well would double-count the same signal.
-A bypassed control is recorded as Gate 2 = YES with `lsr = none`.
+The report describes only same-level slips and trips, manual handling and ergonomic strain, hand
+tools, minor sharps, heat stress, housekeeping, or property damage with nobody exposed. These can
+be genuine injuries. They are not what this system is for.
 
-If the narrative shows a breach of any of these eight, Gate 2 is almost always YES. Record which
-rule in the `lsr` field:
+### Answer `insufficient_information` when
 
-1. **Confined Space** — entering without authorisation / gas test
-2. **Driving** — seatbelt, speed, fitness, distraction
-3. **Energy Isolation** — verified isolation before work
-4. **Hot Work** — control of flammables and ignition sources
-5. **Line of Fire** — position relative to moving, energised, or pressurised things
-6. **Safe Mechanical Lifting** — planned and rigged lifts, no load overhead
-7. **Work Authorisation** — valid permit, understood and followed
-8. **Working at Height** — protection against falls
+The text does not let you name a hazard category at all — "Employee was injured at the facility.
+Hospitalized." This is a real, reportable state, **not** a soft `no`: these reports go to a human,
+they are not dismissed. Target **under 10%** of reports. It is for text that genuinely does not
+say what happened, not for cases you find difficult. If careful reading gets you to a confident
+call, make the call.
 
 ---
 
-### Gate 3 — Serious Injury Plausible
+## 4. Gate 2 — Control status
 
-> If one small, realistic thing had gone differently, would this have killed someone or
-> changed their life permanently?
+> Was there a control targeting the Gate 1 hazard, and was it doing its job at that moment?
 
-Ask: **shift the timing by a few seconds, or the position by a metre — what happens?**
+`present` → **stop. Not a precursor.**
 
-Gate 3 is **YES** if that shifted version produces death, amputation, permanent disability, severe burn,
-blindness, spinal or serious head injury, or admission to intensive care.
+A **direct control** is a safeguard that (a) targets the Gate 1 hazard specifically, (b) works even
+when a person makes a mistake, and (c) was verifiably in place at the time. A locked and proven
+isolation. A rated fall-arrest system actually clipped to a rated anchor. A fitted interlocked
+guard. A hard barricade. A trench protective system. A lift inside its load chart.
 
-Constrain yourself to **plausible** changes, not imaginative ones. "The scaffold plank flipped and he
-caught the rail" → had he not caught it, an 8 m fall — **YES**. "A bolt fell from a shelf at waist
-height and there happened to be a person nearby" → no realistic version of this kills anyone — **NO**.
+**These are not direct controls:** training, experience, toolbox talks, signage, hi-vis, pre-job
+briefs, procedures on paper, a permit that was signed but not followed, "being careful", or PPE
+that cannot stop the Gate 1 energy. A hard hat is not a control for an 8 m fall.
 
-Gate 3 is **YES by default** for any *actual* fatality, amputation, or hospitalisation in the report.
+| Value | Choose it when |
+|---|---|
+| `absent` | No direct control existed, or one existed and was **not used, removed, bypassed, defeated, or disabled** — harness worn but not clipped; guard taken off; isolation never applied; no permit raised; interlock jumped |
+| `failed` | A control was in place and **did not hold** — sling parted, anchor pulled out, shoring collapsed, brake failed, isolation was applied but the system was still live |
+| `present` | A rated, targeted control **was in place and did its job**, and the event stayed inside the protection it gives. The narrative must say so — you may not infer it |
+| `unclear` | A hazard is clearly present but the text does not say what the control was doing |
+
+### `absent` versus `failed`
+
+Ask **was it there and doing its job?** If the answer is no because nobody put it there or somebody
+took it away, that is `absent`. If the answer is no because it was there and broke, that is
+`failed`. This distinction is a dashboard axis, not bookkeeping: `energy_isolation × absent` is a
+planning and supervision problem; `energy_isolation × failed` is an equipment problem. They get
+different fixes.
+
+### `unclear` does not become `absent`
+
+If the narrative is silent about controls, record `unclear`. Do **not** reason "the person got hurt,
+so the control must have failed" — that is a conclusion the text does not support, and it would
+convert every vague report into a precursor.
 
 ---
 
-## 3. Deciding the label
+## 5. Gate 3 — Plausible variation, and severity
 
-| Gate 1 | Gate 2 | Gate 3 | Label |
+> Change one small, realistic thing — the timing by a few seconds, the position by a metre, or
+> remove a last-second intervention. What happens then?
+
+Score `severity` **on that changed version**, not on what actually happened.
+
+| `severity` | The plausible-variation outcome |
+|---|---|
+| 5 | Fatality — one person or several |
+| 4 | Life-altering: amputation, major burn, blindness, serious head or spinal injury, permanent impairment, ICU admission |
+| 3 | Lost-time injury, full recovery expected |
+| 2 | Medical treatment, no lost time |
+| 1 | First aid at most |
+
+**Gate 3 passes when `severity` is 4 or 5.**
+
+The change you imagine must be **plausible, not merely conceivable**. "The plank tipped and he
+caught the handrail" — had he not caught it, an 8 m fall: severity 5. "A bolt fell from waist
+height and someone was standing nearby" — no realistic version of that kills anyone: severity 1.
+
+**An actual fatality, amputation, or ICU admission in the report scores 4 or 5 by definition.**
+Do not talk yourself down from an outcome that already happened.
+
+Record `severity` for **every** report, including the ones that fail Gate 1 or 2. The queue sorts
+on it, and it is the input to the severity MAE table.
+
+---
+
+## 6. The decision
+
+| `hazard_assessment` | `control_status` | `severity` | `is_sif_precursor` |
 |---|---|---|---|
-| YES | YES | YES | **SIF_PRECURSOR** |
-| NO | — | — | **NOT_SIF** |
-| — | NO | — | **NOT_SIF** |
-| — | — | NO | **NOT_SIF** |
-| Narrative too thin to judge a gate | | | **UNCLEAR** |
+| `yes` | `absent` or `failed` | 4 or 5 | **true** |
+| `yes` | `absent` or `failed` | 1–3 | false |
+| `yes` | `present` | any | false |
+| `yes` | `unclear` | any | false — see below |
+| `no` | — | — | false |
+| `insufficient_information` | — | — | false |
 
-Use **UNCLEAR** sparingly — target under 10% of reports. It is for narratives that genuinely do not
-say what happened ("Employee was injured at facility. Hospitalized."), not for cases you find hard.
-If you can make a confident judgement by reading carefully, make it.
+### Why `unclear` does not produce a precursor
 
-**Also record for every report:**
+We chose recall over precision deliberately, so this looks like the wrong call. It is not, and the
+reasoning needs to be sayable out loud:
 
-- `energy_source` — the single dominant Gate 1 energy (or `none`)
-- `lsr` — the IOGP Life-Saving Rule breached (or `none`)
-- `notes` — one line of rationale; mandatory for `UNCLEAR` and for any close call
-
----
-
-## 4. Standing decisions (apply consistently)
-
-1. **Outcome does not decide the label.** Severity of the actual injury informs Gate 3 but never
-   overrides Gates 1 and 2.
-2. **Absence of evidence is evidence of absence for controls.** OSHA narratives rarely mention
-   controls that worked. If a high-energy event reached a person, the direct control did not hold —
-   Gate 2 is YES unless the narrative explicitly says a control functioned.
-3. **One report, one label.** If a narrative describes several hazards, label on the most severe one.
-4. **Motor-vehicle incidents on public roads** still count if Gate 1 motion is met — record LSR
-   *Driving*.
-5. **Heat stress, repetitive strain, and slips on the same level** are Gate 1 NO.
-6. **Falls between 1.2 m and 1.8 m** are Gate 1 YES — do not require the OSHA 1.8 m trigger height.
-7. **Struck-by a powered hand tool** (nail gun, grinder wheel burst) is Gate 1 YES via mechanical.
+Marking every `unclear` as a precursor would flag most vaguely-written high-hazard reports, push the
+positive class far past the 20–25% the data actually carries, and make the ranking useless — the
+dashboard would say every site is on fire. Recall is preserved a different way: **`severity` is
+still recorded, so a severity-5 `unclear` report sits near the top of the queue and gets read.**
+`is_sif_precursor = false` means "not confirmed as a precursor", never "closed" or "ignored". The
+system never closes a report; it reorders the reading queue.
 
 ---
 
-## 5. Worked examples
+## 7. Standing decisions
 
-| # | Narrative (abridged) | G1 | G2 | G3 | Label | Why |
-|---|---|---|---|---|---|---|
-| 1 | Worker on 5 m scaffold, no guardrail installed, stepped back and fell to grade. Fractured pelvis. | Y (gravity) | Y (WAH — no fall protection) | Y | **SIF_PRECURSOR** | Textbook |
-| 2 | Worker cleaning conveyor while running; sleeve caught in pinch point; finger amputated. | Y (mechanical) | Y (Energy Isolation — no LOTO) | Y | **SIF_PRECURSOR** | Amputation → G3 by default |
-| 3 | Worker slipped on wet floor in break room, fractured wrist. | N | — | — | **NOT_SIF** | Same-level slip, no high energy |
-| 4 | Worker lifting 20 kg box, strained lower back, hospitalised for observation. | N | — | — | **NOT_SIF** | Ergonomic; hospitalisation alone is not SIF |
-| 5 | Crane load swung over crew during lift; taglines not used; load set down without contact. | Y (motion/gravity) | Y (Lifting — load overhead) | Y | **SIF_PRECURSOR** | No injury; still a precursor |
-| 6 | Electrician opened 480 V panel to troubleshoot, arc flash, second-degree burns to face. | Y (electrical) | Y (Energy Isolation) | Y | **SIF_PRECURSOR** | |
-| 7 | Worker fell 4 m from steel; harness and lanyard arrested the fall at a rated anchor; no injury. | Y (gravity) | **N** (control held) | Y | **NOT_SIF** | Gate 2 closes it — control worked as designed |
-| 8 | Employee was injured and taken to hospital. No further detail. | ? | ? | ? | **UNCLEAR** | Narrative too thin |
-| 9 | Worker in 2.5 m unshored trench; wall sloughed, buried to waist; freed by crew. | Y (gravity) | Y (no protective system) | Y | **SIF_PRECURSOR** | |
-| 10 | Worker struck thumb with hammer, fracture. | N | — | — | **NOT_SIF** | Hand-tool energy |
+Apply these consistently. They exist because two people reading the same sentence otherwise split.
+
+1. **Outcome never decides the label.** It informs `severity` only. Gates 1 and 2 are about the
+   situation.
+2. **Controls are not inferred.** `present` requires the text to say the control worked. Silence is
+   `unclear`, not `absent` and not `present`.
+3. **Near-misses count fully.** No injury does not mean no precursor. A load swung over a crew and
+   was set down safely is a precursor if Gates 1–3 pass.
+4. **Positive safety observations** — "crew stopped the job when they noticed the missing guard" —
+   are **not** precursors when the hazard was recognised and controlled before exposure. Record
+   `hazard_assessment = yes`, `control_status = present`, and say so in `notes`.
+5. **Work at height has no trigger height.** Judge whether the fall could kill or maim at Gate 3
+   rather than looking for a number. **We have no sourced threshold and will not invent one.**
+6. **Vehicle incidents on public roads** are in scope — `lsr_rule = driving`.
+7. **`permit_to_work` is the fallback category**, not the first choice. Use it when the failure is
+   the authorisation itself, or when no other rule names the hazard.
+8. **Multiple people exposed** raises `severity` toward 5, never lowers it.
+9. **Contractor or own-workforce makes no difference** to any gate. It is metadata, not evidence.
+
+### Code-mixed reports
+
+Some reports are in Hindi, Hinglish, or code-mixed English. **Label them by the same gates.** If you
+can read the report well enough to name the hazard, do so; if you genuinely cannot, that is
+`insufficient_information` and you must say "language" in `notes` — so we can tell a language
+failure apart from a thin-narrative failure when we compute agreement.
 
 ---
 
-## 6. Revision protocol
+## 8. Worked examples
 
-Member 3 computes raw agreement and Cohen's kappa after both annotators finish. **If kappa < 0.70**,
-the two annotators review disagreement patterns *without* re-litigating individual cases, Member 1
-revises this rubric — bumping the version and appending to §4 — and both annotators **re-label all 180
-reports** from scratch against the new version. Record the version used in the `rubric_version` field
-on every label.
+| # | Report (abridged) | `hazard_assessment` / `lsr_rule` | `control_status` | `severity` | `is_sif_precursor` |
+|---|---|---|---|---|---|
+| 1 | Technician opened a pump starter panel to clear a fault; circuit not isolated, no lockout applied. | `yes` / `energy_isolation` | `absent` | 5 | **true** |
+| 2 | Fitter on a 5 m scaffold with no guardrail fitted; harness worn but not clipped. Fell, fractured pelvis. | `yes` / `work_at_height` | `absent` | 4 | **true** |
+| 3 | Fitter slipped on the scaffold; harness was clipped to a rated anchor and the fall arrest functioned. Unhurt. | `yes` / `work_at_height` | `present` | 4 | false |
+| 4 | Crane load swung over the crew because taglines were not used. Set down without contact, nobody hurt. | `yes` / `lifting` | `absent` | 5 | **true** |
+| 5 | Sling parted during a routine lift; load dropped onto an empty deck. | `yes` / `lifting` | `failed` | 5 | **true** |
+| 6 | Worker slipped on a wet floor in the break room, fractured wrist. | `no` / `none` | — | 3 | false |
+| 7 | Worker strained back lifting a 20 kg box; hospitalised overnight for observation. | `no` / `none` | — | 2 | false |
+| 8 | "Employee was injured at the facility and taken to hospital." | `insufficient_information` / `none` | — | 2 | false |
+| 9 | Two workers entered a storage tank to clean it. No gas test recorded, no attendant posted. | `yes` / `confined_space` | `absent` | 5 | **true** |
+| 10 | Welding on a flare line; fire watch posted, area gas-tested and cleared, no incident. | `yes` / `hot_work` | `present` | 4 | false |
+| 11 | Driver ejected during a rollover on the haul road; seatbelt not worn. Spinal injuries. | `yes` / `driving` | `absent` | 5 | **true** |
+| 12 | "Crew reported hydraulic leak near the pump during shift handover." Nothing further. | `yes` / `line_of_fire` | `unclear` | 4 | false — flagged by severity, not by label |
+| 13 | Crew stopped work on noticing the conveyor guard was missing and raised it before starting. | `yes` / `energy_isolation` | `present` | 4 | false — positive observation, §7.4 |
+| 14 | Worker struck his thumb with a hammer while framing; fracture. | `no` / `none` | — | 2 | false |
+| 15 | Contractor began hydrojetting with no permit raised; area owner not informed. | `yes` / `permit_to_work` | `absent` | 4 | **true** |
 
-**Changelog**
+Examples 3, 12, and 13 are the ones that separate reading from keyword-hunting. Expect the
+disagreements to cluster there.
 
-- **v1.0** — initial rubric. Gates derived from the high-energy / direct-control SIF model; control
-  breaches cross-referenced to the nine IOGP Life-Saving Rules.
+---
+
+## 9. Sources, and what is ours
+
+Being precise about this is a defence, not a disclaimer. The hostile question is
+*"who decided what counts as serious?"* — and the answer is that we did, in writing, before we
+labelled anything.
+
+**Sourced.** The high-energy-hazard / direct-control structure of Gates 1 and 2 comes from the
+precursor literature the problem statement itself cites — DEKRA (Martin & Black 2015), the EEI SIF
+Precursor model, and VelocityEHS 2024. The eight hazard categories are IOGP Report 459
+Life-Saving Rules; 459 defines nine and our exclusion of the ninth is explained in §3.
+
+**Ours, and stated as ours.** The `severity` 1–5 anchors in §5, the `severity ≥ 4` threshold for
+Gate 3, the decision that `unclear` does not produce a precursor (§6), and every standing decision
+in §7 are this team's calibration choices. They are not quoted from any source and must never be
+presented as if they were.
+
+**Deliberately absent.** No energy thresholds in joules, volts, bar, or metres appear anywhere in
+this rubric. An earlier draft carried them; they were removed because we could not verify them
+against a source we actually hold. Gate 3 does that work instead.
+
+**External review.** Before labelling starts, this rubric gets a 15-minute review from an
+EHS or industrial-engineering contact outside the team. Record the reviewer's name and date here:
+
+> Reviewed by: ________________  Date: __________  Changes made: ________________
+
+---
+
+## 10. Labelling protocol
+
+1. **Independence.** Members 1 and 3 label all 180 reports — 150 synthetic, 30 OSHA — with no
+   contact until both finish. Member 3 generated the synthetic reports without seeing this rubric;
+   Member 1 wrote this rubric without seeing the reports.
+2. **Batched, for an early signal.** First 90 by day 4, remainder by day 6. The day-4 batch exists
+   so a broken gate surfaces while there is still time to fix it.
+3. **Tiebreak.** Member 6 adjudicates every disagreement and records **which gate split** — not
+   just the final label. That column is the whole diagnostic.
+4. **Agreement.** Member 3 computes raw agreement and Cohen's kappa (`cohen_kappa_score`).
+   Report both: kappa subtracts the agreement chance alone would produce.
+5. **If agreement is below 70%**, the rubric is ambiguous — not the annotators. Revise **only the
+   gate that split**, bump to v2.1, and re-label **only the reports that turned on that gate**.
+   Losing a day here is cheaper than building everything downstream on labels nobody trusts.
+6. **Every label records `rubric_version`.** A label made under v2.0 and one made under v2.1 are
+   not the same measurement.
+
+Agreement is also the ceiling on every number we report afterwards. If two humans applying this
+document agree 88% of the time, no classifier can honestly claim 95%.
+
+---
+
+## Changelog
+
+- **v2.0** — rebuilt against the locked three gates. Gate 1 is now `yes`/`no`/
+  `insufficient_information` over the eight IOGP categories, replacing v1.0's nine-source energy
+  wheel. Gate 2 is now four-valued (`absent`/`failed`/`present`/`unclear`), replacing a boolean;
+  `present` stops the assessment and `unclear` no longer collapses into "control failed". Gate 3
+  now carries a 1–5 severity scale, needed for the severity MAE table and the queue ordering.
+  All unsourced numeric energy thresholds removed. Field names aligned to NAMES.md. Revision
+  protocol narrowed from "re-label all 180" to "re-label the reports that turned on the offending
+  gate".
+- **v1.0** — superseded. Built before the master plan; used an energy-wheel taxonomy, a boolean
+  Gate 2, no severity scale, and carried numeric thresholds we could not source.
