@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import db
 from .api.routes import router
 from .config import get_settings
 
@@ -28,6 +29,6 @@ def health() -> dict:
     return {
         "status": "ok",
         "stub_mode": settings.stub_mode,
-        "database": "connected" if settings.db_configured else "not_configured",
+        "database": "connected" if db.is_live() else "not_configured",
         "rubric_version": settings.rubric_version,
     }

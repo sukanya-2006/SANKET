@@ -293,3 +293,51 @@ def test_positive_class_stays_in_the_20_to_25_percent_band():
     assert 0.20 <= summary["precursor_rate"] <= 0.25
     assert summary["model_version"] == aggregate.MODEL_VERSION
     assert summary["median_triage_seconds"] > 0
+
+
+# --- Vocabulary drift: Pydantic vs SQL ---------------------------------------------------
+
+
+def test_sql_schema_uses_the_same_vocabulary_as_the_pydantic_enums():
+    """NAMES.md exists because these three copies drifted across three drafts.
+
+    A value added to an enum without being added to the CHECK constraint fails on insert at
+    runtime, in Phase 3, probably during the demo. Catch it here instead.
+    """
+    from app.schemas import ControlStatus, HazardAssessment
+
+    from app.db import SCHEMA_SQL
+
+    sql = SCHEMA_SQL.read_text(encoding="utf-8")
+    for enum in (HazardAssessment, ControlStatus, LSRRule):
+        for member in enum:
+            assert f"'{member.value}'" in sql, f"{member.value} missing from schema.sql"
+
+
+def test_sql_schema_carries_every_locked_field_name():
+    from app.db import SCHEMA_SQL
+
+    sql = SCHEMA_SQL.read_text(encoding="utf-8")
+    for field in (
+        "hazard_assessment", "lsr_rule", "control_status", "severity", "is_sif_precursor",
+        "confidence", "flagged_phrases", "reasoning",
+        "site", "activity", "shift", "report_date", "is_contractor", "source",
+        "model_version", "is_fallback", "annotator", "rubric_version",
+    ):
+        assert field in sql, f"locked name {field} missing from schema.sql"
+
+
+def test_recommended_check_is_not_persisted():
+    """It is a static lookup; a stored copy would drift from the checklist we ship."""
+    from app.db import SCHEMA_SQL
+
+    sql = SCHEMA_SQL.read_text(encoding="utf-8")
+    assert "recommended_check text" not in sql
+    assert "recommended_check" in sql  # explained in a comment, not stored
+
+
+def test_api_runs_without_a_database():
+    from app import db
+
+    assert db.is_live() is False
+    assert client.get("/health").json()["database"] == "not_configured"

@@ -122,12 +122,37 @@ backend/app/
   stub.py             deterministic fake classifier + seeded dataset
   api/routes.py       all endpoints
   api/recommendations.py  static checklists, never model output
+  db.py               Supabase client; returns None when unconfigured
+  sql/schema.sql      Supabase tables, constraints, RLS, fixed site list
   sql/aggregates.sql  Phase 3 SQL, one statement per aggregate
 backend/tests/        the ten tests named in TECH_STACK v2
 ```
 
-**Not built yet:** Supabase wiring (`db.py`), the real classifiers, the SQLite cache, and the
-offline fallback. Three tests for those are present and explicitly skipped rather than faked.
+## Database
+
+[app/sql/schema.sql](app/sql/schema.sql) — run it once in the Supabase SQL editor, then
+[app/sql/aggregates.sql](app/sql/aggregates.sql) for the `latest_predictions` view. Four tables:
+`sites`, `reports`, `predictions`, `gold_labels`.
+
+- **`predictions` is append-only.** Never UPDATE a row; write a new one. That makes "every
+  judgement is logged and reviewable" a property of the schema rather than a promise.
+- **Two CHECK constraints encode rubric v2.0 §6 and §2** — `is_sif_precursor` must equal
+  `hazard yes AND control absent/failed AND severity >= 4`, and `control_status` must be null
+  unless the hazard is `yes`. A prompt change cannot quietly redefine the label.
+- **`gold_labels.gate_split`** records which gate the annotators disagreed on. That column is the
+  whole diagnostic if agreement lands under 70%: it says which gate to revise instead of
+  rewriting the rubric wholesale.
+- **RLS is on with no policies.** The frontend never talks to Supabase — it goes through FastAPI,
+  which holds the service key. A leaked anon key reads nothing.
+- Three tests assert that the SQL vocabulary, the Pydantic enums, and the locked names have not
+  drifted apart.
+
+The API runs fine with no database: `db.get_client()` returns None and the routes serve the
+seeded stub. Member 5 is never blocked on an instance being awake, and the demo does not die if
+a free-tier database went to sleep.
+
+**Not built yet:** the real classifiers, the SQLite cache, and the offline fallback. Three tests
+for those are present and explicitly skipped rather than faked.
 
 **Open question for the team:** TECH_STACK v2 §"Repo layout" specifies `api/` and `web/`; the repo
 uses `backend/` and `frontend/`. Module names match the doc. Decide before deploy config is written.
