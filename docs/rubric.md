@@ -1,4 +1,4 @@
-# SIF Precursor Classification Rubric v2.0
+# SIF Precursor Classification Rubric v2.1
 
 **Owner:** Member 1 · **Annotators:** Member 1 + Member 3, independently · **Tiebreak:** Member 6
 
@@ -7,7 +7,7 @@ Gates and field names are locked by [TECH_STACK.md](TECH_STACK.md) §Ground trut
 
 > **Label using this document only.** No discussion with the other annotator until both of you
 > have finished. If the rubric does not answer your question, write the question in `notes` and
-> make your best call — do not ask. The questions you write are the evidence that revises v2.1.
+> make your best call — do not ask. The questions you write are the evidence that revises v2.2.
 
 ---
 
@@ -35,7 +35,7 @@ produce, so a synonym here becomes a bug three files away.
 | `severity` | 1–5 |
 | `is_sif_precursor` | true / false — determined by the table in §6, never set by feel |
 | `notes` | one line of rationale; **mandatory** for every `insufficient_information`, every `unclear`, and every call you found hard |
-| `rubric_version` | `2.0` |
+| `rubric_version` | `2.1` |
 
 ---
 
@@ -61,8 +61,26 @@ here as well would count the same signal twice. A bypassed control is recorded a
 | `driving` | Operating a vehicle on site or public road, including passenger exposure |
 | `permit_to_work` | Work that required an authorisation which was not raised, not valid, or not followed — used when no other category names the hazard better |
 
-**One report, one rule.** If several apply, pick the one carrying the greatest potential to kill.
-Name the tie-break you used in `notes`.
+**One report, one rule.** If several apply, use this precedence — it exists so two annotators
+reading the same multi-hazard report land on the same rule, which a shared "pick the worst one"
+instruction does not guarantee:
+
+> `confined_space` → `work_at_height` → `energy_isolation` → `line_of_fire` → `lifting` →
+> `driving` → `hot_work` → `permit_to_work`
+
+Override the precedence only when the narrative makes a lower rule clearly the thing that would
+have caused the death, and say so in `notes`.
+
+**Chemical hazards.** The eight rules contain no chemical category, and oil and gas work is full
+of them. Resolve as follows:
+
+- Released from a system that should have been isolated, drained, or depressurised first →
+  `energy_isolation`.
+- Released and the person was in its path, with no isolation failure described →
+  `line_of_fire`.
+- A splash or exposure with **no release from a system** — only a missing PPE item →
+  Gate 1 is `no`. A missing PPE item never creates a hazard the narrative does not otherwise
+  contain.
 
 ### Answer `no` when
 
@@ -110,6 +128,28 @@ took it away, that is `absent`. If the answer is no because it was there and bro
 planning and supervision problem; `energy_isolation × failed` is an equipment problem. They get
 different fixes.
 
+### A person is not a control — with one exception
+
+§4 says training, supervision and "being careful" are not direct controls. §7.4 says a crew that
+recognised and controlled a hazard before exposure is `present`. Both are right, and the line
+between them is **whether anyone was exposed**:
+
+- The intervention happened **before exposure began** — a supervisor stops entry because the gas
+  test lapsed, a crew halts on noticing a missing guard → `control_status = present`. The hazard
+  was recognised and controlled. Not a precursor.
+- Exposure **had already begun** and a person intervened, caught themselves, or was pulled clear
+  → `control_status = absent` or `failed`, whichever the narrative supports. A last-second rescue
+  is not a barrier; §5 explicitly tells you to remove it before scoring severity.
+
+Self-rescue is never a control. A worker who falls and grabs a handrail was not protected by
+anything — record what the barrier was doing, which is `absent` if nothing was in place.
+
+### A control that stopped the event is `present`, even if it broke doing so
+
+`failed` means the event was **not stopped**. A lanyard that arrested a fall and had to be scrapped
+afterwards did its job: `present`. An anchor that pulled out and let the person hit the ground:
+`failed`.
+
 ### `unclear` does not become `absent`
 
 If the narrative is silent about controls, record `unclear`. Do **not** reason "the person got hurt,
@@ -141,6 +181,11 @@ height and someone was standing nearby" — no realistic version of that kills a
 
 **An actual fatality, amputation, or ICU admission in the report scores 4 or 5 by definition.**
 Do not talk yourself down from an outcome that already happened.
+
+**This is a rule about `severity`, not about Gate 1.** A death with no Life-Saving Rule hazard —
+a fatal heart attack at a valve, say — is Gate 1 `no` with `severity` 5. The outcome was fatal;
+the situation was not a precursor. §7.1 and this paragraph do not conflict: severity records how
+bad the plausible variation is, and Gate 1 records whether a hazard was present at all.
 
 Record `severity` for **every** report, including the ones that fail Gate 1 or 2. The queue sorts
 on it, and it is the input to the severity MAE table.
@@ -192,6 +237,18 @@ Apply these consistently. They exist because two people reading the same sentenc
    the authorisation itself, or when no other rule names the hazard.
 8. **Multiple people exposed** raises `severity` toward 5, never lowers it.
 9. **Contractor or own-workforce makes no difference** to any gate. It is metadata, not evidence.
+10. **Naming a hazard is not enough to clear Gate 1.** "Crane issue during lift" names a category
+    but says nothing about what happened or what the controls were — that is
+    `insufficient_information`, not `yes` with `control_status = unclear`.
+11. **Label the hazard the text describes, whatever its tone.** Sarcasm, blame, and frustration are
+    not evidence about the hazard. A report describing an ongoing practice rather than a single
+    event is still labelled on that hazard.
+12. **A detection-and-evacuation system that worked is `present`.** An alarm that sounded and a
+    crew that got out is a barrier doing its job, even though the atmosphere or condition
+    degraded to make it sound.
+13. **Work the gates in order, top down.** Do not start from a control failure you noticed and
+    reverse-engineer a hazard to justify it. If Gate 1 is `no`, stop — whatever the report says
+    about PPE or procedure.
 
 ### Code-mixed reports
 
@@ -218,6 +275,9 @@ failure apart from a thin-narrative failure when we compute agreement.
 | 10 | Welding on a flare line; fire watch posted, area gas-tested and cleared, no incident. | `yes` / `hot_work` | `present` | 4 | false |
 | 11 | Driver ejected during a rollover on the haul road; seatbelt not worn. Spinal injuries. | `yes` / `driving` | `absent` | 5 | **true** |
 | 12 | "Crew reported hydraulic leak near the pump during shift handover." Nothing further. | `yes` / `line_of_fire` | `unclear` | 4 | false — flagged by severity, not by label |
+| 16 | Caustic splash to the face while breaking a line; goggles available but not worn. | `yes` / `energy_isolation` | `absent` | 4 | **true** — line not drained before breaking (§3 chemical ruling) |
+| 17 | Supervisor stopped entry after noticing the gas test had expired; entry rescheduled. | `yes` / `confined_space` | `present` | 5 | false — intervention before exposure (§4) |
+| 18 | Worker suffered a fatal heart attack while operating a valve. | `no` / `none` | — | 5 | false — fatal outcome, no LSR hazard (§5) |
 | 13 | Crew stopped work on noticing the conveyor guard was missing and raised it before starting. | `yes` / `energy_isolation` | `present` | 4 | false — positive observation, §7.4 |
 | 14 | Worker struck his thumb with a hammer while framing; fracture. | `no` / `none` | — | 2 | false |
 | 15 | Contractor began hydrojetting with no permit raised; area owner not informed. | `yes` / `permit_to_work` | `absent` | 4 | **true** |
@@ -278,6 +338,15 @@ document agree 88% of the time, no classifier can honestly claim 95%.
 
 ## Changelog
 
+- **v2.1** — applied the three defects found by the [rubric red-team](red-team-reports.md) before
+  labelling began, so no re-labelling is required. Added a chemical-hazard ruling (the eight IOGP
+  categories contain none, and a caustic splash previously had four defensible answers); added an
+  explicit precedence order for multi-hazard reports; resolved the §4 / §7.4 conflict on human
+  intervention with the before-or-after-exposure line, which split two of the fifteen adversarial
+  cases; clarified that a control which stopped the event is `present` even if damaged; and made
+  explicit that §5's fatality rule governs `severity` only, never Gate 1. Four standing decisions
+  added covering thin-but-named hazards, adversarial tone, working detection systems, and gate
+  order. **No gate was restructured.**
 - **v2.0** — rebuilt against the locked three gates. Gate 1 is now `yes`/`no`/
   `insufficient_information` over the eight IOGP categories, replacing v1.0's nine-source energy
   wheel. Gate 2 is now four-valued (`absent`/`failed`/`present`/`unclear`), replacing a boolean;

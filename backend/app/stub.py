@@ -138,7 +138,7 @@ def classify_stub(report_text: str) -> ClassificationResult:
             control, _ = ControlStatus.PRESENT, flagged.append(hit)
         else:
             control = ControlStatus.UNCLEAR
-    # Rubric v2.0 §2: control_status stays null unless Gate 1 answered `yes`. There is no
+    # Rubric v2.1 §2: control_status stays null unless Gate 1 answered `yes`. There is no
     # control to assess for a hazard we could not name.
 
     # Gate 3 — plausible variation, expressed as potential severity
@@ -325,7 +325,7 @@ def _build() -> list[ReportDetail]:
                 else:
                     shift = "night" if i % 3 == 0 else "day"
             else:
-                # Weighted, not an even three-way split: rubric v2.0 §3 targets under 10%
+                # Weighted, not an even three-way split: rubric v2.1 §3 targets under 10%
                 # insufficient_information, and barrier-held cases are the interesting ones.
                 idx = (i - n_precursors) % 10
                 kind = 0 if idx < 4 else (1 if idx < 9 else 2)

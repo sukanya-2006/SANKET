@@ -505,7 +505,7 @@ def test_api_runs_without_a_database():
 
 def test_meta_exposes_measured_model_health():
     body = client.get("/meta").json()
-    assert body["rubric_version"] == "2.0"
+    assert body["rubric_version"] == "2.1"
     assert set(body["lsr_rule"]) == {r.value for r in LSRRule}
     assert body["sites"] and body["activities"]
     assert "schema_failure_rate" in body["metrics"]

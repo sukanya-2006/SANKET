@@ -7,7 +7,7 @@ annotator. Two of those are on the critical path in week one.
 
 ## 1. Tiebreak annotator — week one, blocking
 
-Members 1 and 3 label all 180 reports independently against [rubric v2.0](../rubric.md). You
+Members 1 and 3 label all 180 reports independently against [rubric v2.1](../rubric.md). You
 adjudicate every disagreement.
 
 **Record which gate split, not just the final label.** `gold_labels.gate_split` takes 1, 2, or 3.

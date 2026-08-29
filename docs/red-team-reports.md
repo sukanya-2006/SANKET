@@ -1,11 +1,15 @@
 # Rubric red-team — 15 reports engineered to split the gates
 
-**Purpose:** break [rubric v2.0](rubric.md) before it costs five days of labelling, not after.
+**Purpose:** break [rubric v2.1](rubric.md) before it costs five days of labelling, not after.
 **Owner:** Member 1. **Consumer:** Member 3, who folds these into the dataset.
 
 The gates are **locked**. Nothing here restructures them. Every proposal below is an addition to
-§7 Standing decisions, and none of it enters the rubric unless the day-4 agreement check fails —
-at which point these are the pre-written answers rather than a panicked rewrite.
+the rubric's standing decisions, never a change to a gate.
+
+**Three of these findings were defects rather than contingencies, and were applied in rubric
+v2.1** — before labelling started, so no re-labelling was needed. They are marked below. The
+remaining twelve rulings stay in reserve: if the day-4 agreement check fails, these are the
+pre-written answers rather than a panicked rewrite.
 
 Each report is written to be genuinely ambiguous under the current wording. If you read one and
 feel certain, note which gate you were certain about; if Member 3 felt equally certain the other
@@ -107,8 +111,9 @@ annotator must either force it into `line_of_fire` (person in the path of a rele
 `energy_isolation` (line not drained or isolated before breaking), `permit_to_work` (fallback), or
 answer Gate 1 `no` — which throws away a genuine SIF hazard.
 
-**Split point: Gate 1, and the rubric currently gives no answer.** Fix this before labelling
-regardless of the agreement number.
+**Split point: Gate 1, and the rubric gave no answer.** → **Resolved in v2.1 §3**: released from
+a system that should have been isolated is `energy_isolation`; released with the person in its
+path is `line_of_fire`; a splash with no release and only a PPE gap is Gate 1 `no`.
 
 ---
 
@@ -158,7 +163,9 @@ naming a hazard is enough to clear Gate 1 when nothing else is known.
 supervisor is a person, not a direct control under §4. An annotator following §4 strictly reaches
 `absent`; one following §7.4 reaches `present`.
 
-**Split point: Gate 2, and §4 and §7.4 genuinely conflict here.**
+**Split point: Gate 2, and §4 and §7.4 genuinely conflicted.** → **Resolved in v2.1 §4**: the
+line is whether anyone was exposed. Intervention before exposure is `present`; intervention after
+exposure began is not a control at all.
 
 ---
 
@@ -215,7 +222,9 @@ Gate 1 `no` — no Life-Saving Rule hazard. §7.1 says the outcome never decides
 **But §5 says an actual fatality scores 4 or 5 by definition**, and an annotator who scores
 severity 5 will feel enormous pull to answer Gate 1 `yes`.
 
-**Split point: Gate 1, and §5 and §7.1 appear to contradict each other.**
+**Split point: Gate 1, and §5 and §7.1 read as contradictory.** → **Resolved in v2.1 §5**: the
+fatality rule governs `severity` only. A death with no Life-Saving Rule hazard is Gate 1 `no` with
+severity 5.
 
 ---
 
@@ -243,7 +252,10 @@ severity 5 will feel enormous pull to answer Gate 1 `yes`.
 
 ## Three findings that should change the rubric before labelling, not after
 
-Most of the table is contingency. These three are defects now:
+> **APPLIED in rubric v2.1**, before labelling began — so no re-labelling was required. The other
+> twelve rulings stay in reserve for the day-4 agreement check.
+
+Most of the table is contingency. These three were defects:
 
 1. **#7 — there is no chemical category.** Eight IOGP rules cover no chemical hazard, and oil and
    gas operations are full of them. Without a ruling, annotators will scatter across four

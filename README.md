@@ -17,7 +17,7 @@ It never closes a report. It reorders the reading queue.
 |---|---|
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | **v2, authoritative.** If any other write-up disagrees, this wins |
 | [NAMES.md](NAMES.md) | Locked field names. Read before writing a line of code, SQL, or UI |
-| [docs/rubric.md](docs/rubric.md) | v2.0 — the three gates, how to apply them, the labelling protocol |
+| [docs/rubric.md](docs/rubric.md) | v2.1 — the three gates, how to apply them, the labelling protocol |
 | [docs/handoff/](docs/handoff/) | One page per member: what is waiting for you and how to plug it in |
 
 **The naming rule matters more than it looks.** Field names drifted across three drafts of the
@@ -54,7 +54,7 @@ shapes. Interactive docs at <http://localhost:8000/docs>.
 | **Classification pipeline** | Cache → primary → retry once → baseline fallback → `is_fallback`. Working end to end with a keyword stub in both slots |
 | **Aggregation** | Rate-based density ranking, small-denominator guard, OSHA exclusion. Runs plain SQL when a database is configured, Python over the stub when not |
 | **Database** | Schema written with constraints that encode the rubric. Not yet pointed at a live instance |
-| **Rubric** | v2.0, locked gates, sources separated from our own calibration |
+| **Rubric** | v2.1, locked gates, sources separated from our own calibration |
 | **Tests** | 34, all real. No skips |
 | **Frontend** | Not started — Member 5 |
 | **Classifiers** | Not started — Member 2. Two functions, one registration call each |
@@ -72,7 +72,7 @@ NAMES.md                  locked field names
 README.md                 this file
 docs/
   TECH_STACK.md           v2, authoritative
-  rubric.md               v2.0 labelling rubric
+  rubric.md               v2.1 labelling rubric
   handoff/                one page per member
   demo-script.md          5-minute script, word for word
   hostile-qa.md           question bank with model answers

@@ -81,11 +81,11 @@ CREATE TABLE IF NOT EXISTS predictions (
     is_fallback        boolean NOT NULL DEFAULT false,
     created_at         timestamptz NOT NULL DEFAULT now(),
 
-    -- Rubric v2.0 §2: there is no control to assess for a hazard we could not name.
+    -- Rubric v2.1 §2: there is no control to assess for a hazard we could not name.
     CONSTRAINT control_status_only_when_hazard_yes CHECK (
         hazard_assessment = 'yes' OR control_status IS NULL
     ),
-    -- Rubric v2.0 §6, enforced so a prompt change cannot quietly redefine the label.
+    -- Rubric v2.1 §6, enforced so a prompt change cannot quietly redefine the label.
     CONSTRAINT precursor_requires_all_three_gates CHECK (
         is_sif_precursor = (
             hazard_assessment = 'yes'

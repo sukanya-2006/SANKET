@@ -56,7 +56,7 @@ limitation, not a gap to hide.
 
 ## 2. Labelling — days 1–6
 
-You and Member 1 label all 180 independently against rubric v2.0, **no discussion until both
+You and Member 1 label all 180 independently against rubric v2.1, **no discussion until both
 finish**. Batched: first 90 by day 4 so a broken gate surfaces while there is time to fix it,
 the rest by day 6. Member 6 tiebreaks.
 
@@ -71,8 +71,8 @@ severity, is_sif_precursor, notes, gate_split, rubric_version, is_tiebreak
 - `gate_split` — 1, 2 or 3, **filled only on Member 6's tiebreak rows**. This column is the whole
   diagnostic: if agreement lands under 70%, it tells you which gate to revise instead of
   rewriting the rubric wholesale.
-- `rubric_version` — `2.0`. A label made under 2.0 and one made under 2.1 are not the same
-  measurement.
+- `rubric_version` — `2.1`. A label made under one rubric version and one made under another
+  are not the same measurement, so this column is not optional.
 - `notes` — mandatory for every `insufficient_information`, every `unclear`, and every hard call.
 
 ### Agreement
@@ -87,7 +87,7 @@ produce. Compute it on `is_sif_precursor` first, then per gate, because the per-
 what identify the culprit.
 
 **Below 70%:** the rubric is ambiguous, not the annotators. Member 1 revises only the offending
-gate, bumps to v2.1, and you both re-label only the reports that turned on that gate.
+gate, bumps the version, and you both re-label only the reports that turned on that gate.
 
 ---
 
