@@ -1,9 +1,12 @@
 # Backend — SIF Precursor Detection API
 
-**Phase 1 status: stub.** Every endpoint returns the final response shape backed by fake,
-deterministic data, so Member 5 can build all three frontend screens before any model exists.
-Phase 3 swaps the bodies for Supabase + the real ML pipeline — **paths and response models do not
-change**.
+**Phase 1 status: stub.** Every endpoint returns the locked schema ([NAMES.md](../NAMES.md))
+backed by deterministic fake data, so Member 5 can build all three screens before any model
+exists. Phase 3 swaps the producers — Member 2's TF-IDF baseline and Claude classifier, and
+Supabase behind the aggregates. **Paths and field names do not change.**
+
+Authoritative specs: [docs/TECH_STACK.md](../docs/TECH_STACK.md) (v2, wins any disagreement),
+[NAMES.md](../NAMES.md), [docs/rubric.md](../docs/rubric.md).
 
 ## Run it
 
@@ -15,96 +18,121 @@ python -m venv .venv
 
 cp .env.example .env        # optional: defaults work with no database
 ./.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
-```
-
-- Interactive docs: <http://localhost:8000/docs>
-- OpenAPI JSON (generate a typed frontend client from this): <http://localhost:8000/openapi.json>
-
-```bash
 ./.venv/Scripts/python.exe -m pytest -q
 ```
 
+Docs at <http://localhost:8000/docs>; OpenAPI JSON at `/openapi.json` (generate the typed
+frontend client from it rather than hand-writing types).
+
 ## Endpoints
 
-| Method | Path | Screen | Notes |
-|---|---|---|---|
-| GET | `/health` | — | stub mode + database status |
-| GET | `/api/v1/meta` | all | enum values for dropdowns; rubric version |
-| POST | `/api/v1/classify` | 1 — live analyze | `{"narrative": "...", "report_id": null}` |
-| POST | `/api/v1/classify/batch` | — | up to 100 narratives |
-| GET | `/api/v1/reports` | 2 — report list | `limit`, `offset`, `label`, `energy_source`, `q` |
-| GET | `/api/v1/reports/{id}` | 2 — detail | 404 when unknown |
-| GET | `/api/v1/dashboard/summary` | 3 — dashboard | tiles, buckets, model health |
+| Method | Path | Screen |
+|---|---|---|
+| `POST` | `/analyze` | 1 — live analyse box |
+| `GET` | `/reports` | 2 — ranked queue (`is_sif_precursor`, `lsr_rule`, `site`, `source`, `q`, `limit`, `offset`) |
+| `GET` | `/reports/{report_id}` | 2 — detail |
+| `GET` | `/aggregate/summary` | 3 — stat cards |
+| `GET` | `/aggregate/sites` | 3 — site rate ranking |
+| `GET` | `/aggregate/activities` | 3 — activity rate ranking |
+| `GET` | `/aggregate/rules` | 3 — rule × barrier view |
+| `GET` | `/aggregate/shifts` | 3 — site × shift |
+| `GET` | `/aggregate/trend` | 3 — monthly line |
+| `GET` | `/meta`, `/health` | all |
 
-## The classification contract
+> **Migration note (v1.1 → v2, 29 Aug).** The Day-3 draft shipped `/api/v1/classify`,
+> `/api/v1/reports`, `/api/v1/dashboard/summary` with invented field names (`label`, `gates`,
+> `energy_source`, `lsr`, `rationale`, `evidence_spans`). Those pre-dated the master plan and
+> **are gone**. Everything now uses the locked names. If Member 5 wrote anything against the old
+> shape, it needs updating — better today than on day 12.
 
-Defined in [app/schemas.py](app/schemas.py). Mirrors the three gates in
-[docs/rubric.md](../docs/rubric.md) v1.0.
+## /analyze response
 
 ```json
 {
-  "report_id": null,
-  "label": "SIF_PRECURSOR",
-  "confidence": 0.91,
-  "gates": {
-    "gate_1_high_energy":              { "passed": true, "rationale": "..." },
-    "gate_2_control_failed":           { "passed": true, "rationale": "..." },
-    "gate_3_serious_injury_plausible": { "passed": true, "rationale": "..." }
+  "result": {
+    "hazard_assessment": "yes",
+    "lsr_rule": "energy_isolation",
+    "control_status": "absent",
+    "severity": 4,
+    "is_sif_precursor": true,
+    "confidence": 0.82,
+    "flagged_phrases": ["isolated", "no lockout"],
+    "reasoning": "Hazard present (energy_isolation) with the direct control absent; ...",
+    "recommended_check": "Verify energy isolation: sources identified, isolated, locked, ..."
   },
-  "energy_source": "mechanical",
-  "lsr": "energy_isolation",
-  "rationale": "All three gates pass: ...",
-  "evidence_spans": [{ "text": "lockout", "start": 62, "end": 69, "gate": 2 }],
-  "model": "stub",
   "model_version": "stub-0.1.0",
-  "rubric_version": "1.0",
-  "offline_fallback": false,
+  "is_fallback": false,
   "latency_ms": 1,
-  "created_at": "2026-08-29T06:59:08Z"
+  "created_at": "2026-08-29T09:08:01Z"
 }
 ```
 
 Contract notes for Member 5:
 
-- `label` is one of `SIF_PRECURSOR`, `NOT_SIF`, `UNCLEAR`. Never assume two classes.
-- Each gate's `passed` is **`true` / `false` / `null`**. `null` means the narrative could not
-  support a judgement — render it as "insufficient information", not as a failed gate.
-- `evidence_spans` are character offsets into the submitted narrative, so the UI can highlight
-  in place: `narrative.slice(span.start, span.end) === span.text`.
-- `lsr` uses **eight** IOGP Report 459 rules. "Bypassing Safety Controls" is deliberately absent —
-  barrier defeat is what Gate 2 measures, so listing it as a category would double-count. A
-  bypassed control arrives as gate 2 `passed: true` with `lsr: "none"`.
-- `offline_fallback` is always `false` in Phase 1. In Phase 4 it turns `true` when the Claude API
-  fails and the local TF-IDF baseline takes over — **build the offline-mode UI indicator against
-  this field now**.
-- Stub results are deterministic: the same narrative always returns the same result.
+- `hazard_assessment` is three-valued. `insufficient_information` is **not** a "no" — render it
+  as its own state; those reports go to human review, not to the bottom of the queue.
+- `control_status` is four-valued (`absent` / `failed` / `present` / `unclear`). `present` means
+  the barrier held, so the report is **not** a precursor even though the hazard was real. That is
+  the ambiguous demo case, and the UI must make it legible.
+- `flagged_phrases` are verbatim substrings of the submitted text — `indexOf` them to highlight.
+  Asserted by a test.
+- `recommended_check` is non-null only when `is_sif_precursor` is true. It is a **static lookup**,
+  never model output.
+- `is_fallback` is always `false` in Phase 1. It flips true in Phase 4 when the Claude call fails
+  or times out and the local TF-IDF baseline answers. **Build the "degraded mode — keyword
+  baseline" banner against this field now.**
+- Stub results are deterministic: same text, same result.
 
-## Configuration
+## Aggregation rules a judge will probe
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `SUPABASE_URL` | `""` | blank ⇒ no database, stub data only |
-| `SUPABASE_SERVICE_KEY` | `""` | server-side key; never ship to the frontend |
-| `STUB_MODE` | `true` | flip to `false` in Phase 3 |
-| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | comma-separated |
+Implemented in [app/aggregate.py](app/aggregate.py); the Phase 3 SQL is already written in
+[app/sql/aggregates.sql](app/sql/aggregates.sql).
+
+1. **Rate, not raw count.** Raw counts penalise sites that report diligently — the opposite of the
+   incentive a safety system should create.
+2. **Both count and rate, always.** Rank by rate; keep the count visible so nobody mistakes 2 of 6
+   for a crisis.
+3. **Small-denominator guard**, `MIN_GROUP_N = 5`. Groups below it go to `insufficient_volume`,
+   which the frontend greys out — never hides.
+4. **Latest prediction per report, current `model_version` only.**
+5. **`source = 'osha'` excluded from every aggregate** — no site taxonomy. Stated plainly, not hidden.
+
+## Seeded stub dataset
+
+180 reports: 150 synthetic across 10 fixed sites + 30 OSHA-shaped rows. Positive class 22%,
+inside the plan's 20–25% band. Distribution is deliberately uneven so the rate ranking has a clean
+winner — Rig 4, 11 of 20 reports, all `energy_isolation`, 9 on night shift. Import-time assertions
+fail loudly if a template edit breaks those numbers, rather than silently on stage.
+
+**Two honesty warnings that must survive into the pitch:**
+
+- The 30 `osha-placeholder-*` rows are **not real OSHA reports**. Member 3/6 replace them with the
+  real pull. Never show them on stage as real OSHA text.
+- `median_triage_seconds` is computed from synthetic timestamps. It is not a measured number and
+  must not be quoted as the before/after headline until real timings exist.
 
 ## Layout
 
 ```
-backend/
-  app/
-    main.py        FastAPI app, CORS, /health
-    config.py      env settings
-    schemas.py     the classification contract (provisional — Member 2 owns the final version)
-    stub.py        deterministic fake classifier + 15-report fake dataset
-    api/routes.py  all /api/v1 endpoints
-  tests/           contract tests that must survive the Phase 3 swap
+backend/app/
+  main.py             FastAPI app, CORS, /health
+  config.py           env settings
+  schemas.py          locked schema (master plan §5)
+  aggregate.py        rate-based density aggregation  ← artifact #2 of the three that matter
+  stub.py             deterministic fake classifier + seeded dataset
+  api/routes.py       all endpoints
+  api/recommendations.py  static checklists, never model output
+  sql/aggregates.sql  Phase 3 SQL, one statement per aggregate
+backend/tests/        the ten tests named in TECH_STACK v2
 ```
 
-## Owner and hand-offs
+**Not built yet:** Supabase wiring (`db.py`), the real classifiers, the SQLite cache, and the
+offline fallback. Three tests for those are present and explicitly skipped rather than faked.
 
-Member 4. Depends on Member 1's rubric ([docs/rubric.md](../docs/rubric.md)) for the gate
-definitions and Member 2's final Pydantic schema. Consumed by Member 5.
+**Open question for the team:** TECH_STACK v2 §"Repo layout" specifies `api/` and `web/`; the repo
+uses `backend/` and `frontend/`. Module names match the doc. Decide before deploy config is written.
 
-**Not built yet:** the Supabase schema and SQL aggregations (Phase 1/3), the real pipeline wiring
-(Phase 3), and the offline-fallback logic (Phase 4).
+## Owner
+
+Member 4. Depends on Member 1's rubric and Member 2's final `ClassificationResult`.
+Consumed by Member 5.

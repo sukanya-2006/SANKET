@@ -1,278 +1,439 @@
-"""Deterministic fake classifier + fake dataset.
+"""Phase 1 stub: deterministic fake classifier + seeded dataset.
 
-Phase 1 only. Returns the exact shape the real pipeline will return so Member 5 can build
-all three screens before any model exists. Replaced in Phase 3 by Member 2's TF-IDF
-baseline and Claude classifier — the response contract does not change, only the producer.
+Returns the locked schema (master plan §5 / NAMES.md) backed by fake data, so Member 5 can
+build all three screens before any model exists. Phase 3 replaces the producer — Member 2's
+TF-IDF baseline and Claude classifier — and the response contract does not change.
 
-Deterministic on purpose: the same narrative always yields the same result, so the UI is
-stable across reloads and demos.
+Deterministic on purpose: the same text always yields the same result, so the UI is stable
+across reloads and the demo.
+
+TWO HONESTY WARNINGS, both of which must survive into the pitch:
+
+1. The 30 `osha` rows here are NOT real OSHA Severe Injury Reports. They are placeholders in
+   the right shape, with ids prefixed `osha-placeholder-`. Member 3 replaces them with the real
+   pull. Never show these on stage as real OSHA text.
+2. `median_triage_seconds` in the aggregate summary is computed from synthetic timestamps
+   generated here. It is not a measured number and must not be quoted as the before/after
+   headline until real timings are recorded.
 """
 
 from __future__ import annotations
 
 import hashlib
-import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
+from .api.recommendations import recommended_check_for
 from .schemas import (
-    Classification,
-    CountBucket,
-    DashboardSummary,
-    EnergySource,
-    EvidenceSpan,
-    Gate,
-    Gates,
-    Label,
-    LifeSavingRule,
-    ModelHealth,
-    ModelName,
+    ClassificationResult,
+    ControlStatus,
+    HazardAssessment,
+    LSRRule,
     ReportDetail,
     ReportSummary,
 )
 
 MODEL_VERSION = "stub-0.1.0"
 
-# Keyword cues, so the fake output tracks the narrative instead of being noise.
-# NOT a model — Member 2's TF-IDF baseline replaces this entirely.
-_ENERGY_CUES: list[tuple[EnergySource, list[str]]] = [
-    (EnergySource.ELECTRICAL, ["volt", "electric", "arc flash", "energized", "power line", "panel"]),
-    (EnergySource.MECHANICAL, ["conveyor", "auger", "press", "rotating", "pinch point", "guard", "machine"]),
-    (EnergySource.GRAVITY, ["fell", "fall", "scaffold", "ladder", "roof", "trench", "collapse", "struck by falling"]),
-    (EnergySource.MOTION, ["forklift", "vehicle", "truck", "backed over", "struck by", "crane", "load swung"]),
-    (EnergySource.PRESSURE, ["pressure", "hydraulic", "steam", "compressed", "hose burst", "vessel"]),
-    (EnergySource.TEMPERATURE, ["burn", "molten", "hot", "flame", "fire", "scald", "cryogenic"]),
-    (EnergySource.CHEMICAL, ["chemical", "acid", "caustic", "toxic", "fumes", "asphyxi", "oxygen deficient"]),
-    (EnergySource.RADIATION, ["radiograph", "laser", "radiation"]),
-    (EnergySource.BIOLOGICAL, ["pathogen", "biological", "infectious"]),
+# --- keyword cues -----------------------------------------------------------------------
+# NOT a model. Member 2's TF-IDF baseline replaces this entirely; it exists so the fake
+# output tracks the text instead of being noise. Order matters: most specific rule first.
+
+_RULE_CUES: list[tuple[LSRRule, list[str]]] = [
+    (LSRRule.CONFINED_SPACE, ["confined space", "vessel entry", "tank entry", "manhole", "gas test"]),
+    (LSRRule.HOT_WORK, ["hot work", "welding", "cutting torch", "fire watch", "grinding sparks"]),
+    (LSRRule.ENERGY_ISOLATION, ["isolat", "lockout", "de-energ", "energised", "energized", "live circuit", "breaker"]),
+    (LSRRule.WORK_AT_HEIGHT, ["scaffold", "at height", "ladder", "derrick", "monkey board", "harness", "guardrail", "fall arrest"]),
+    (LSRRule.LIFTING, ["crane", "sling", "rigging", "hoist", "tagline", "lifted"]),
+    (LSRRule.LINE_OF_FIRE, ["line of fire", "under the load", "in the path", "pressurised line", "pressurized line"]),
+    (LSRRule.DRIVING, ["seatbelt", "light vehicle", "haul road", "approach road", "driven at speed"]),
+    (LSRRule.PERMIT_TO_WORK, ["permit"]),
 ]
 
-_CONTROL_FAILURE_CUES: list[tuple[LifeSavingRule, list[str]]] = [
-    (LifeSavingRule.ENERGY_ISOLATION, ["lockout", "loto", "not de-energized", "still running", "not isolated"]),
-    (LifeSavingRule.WORKING_AT_HEIGHT, ["no guardrail", "without harness", "not tied off", "unprotected edge", "no fall protection"]),
-    (LifeSavingRule.SAFE_MECHANICAL_LIFTING, ["load overhead", "tagline", "rigging", "sling", "unrated"]),
-    (LifeSavingRule.LINE_OF_FIRE, ["line of fire", "in the path", "under the load", "struck by"]),
-    (LifeSavingRule.CONFINED_SPACE, ["confined space", "manhole", "tank entry", "no gas test"]),
-    (LifeSavingRule.HOT_WORK, ["hot work", "welding", "cutting torch", "no fire watch"]),
-    (LifeSavingRule.DRIVING, ["seatbelt", "speeding", "driving", "distracted"]),
-    (LifeSavingRule.WORK_AUTHORISATION, ["no permit", "without a permit", "unauthorized"]),
+# Checked absent -> failed -> present. Absent cues are explicit negations, so they cannot
+# appear in barrier-held text; checking them first stops "no attendant was posted" from
+# matching the present cue "attendant was posted" as a substring.
+_CONTROL_PRESENT_CUES = [
+    "functioned as designed", "was clipped to a rated anchor", "arrested the fall",
+    "isolation was verified", "permit was valid", "guard was fitted", "was in place and followed",
+    "attendant was posted", "fire watch was posted", "held the load",
+]
+_CONTROL_FAILED_CUES = [
+    "failed", "gave way", "did not hold", "parted", "burst", "collapsed", "slipped out of",
+]
+_CONTROL_ABSENT_CUES = [
+    "no lockout", "not isolated", "no guardrail", "not clipped", "no permit", "no gas test",
+    "no attendant", "no fire watch", "no taglines", "no exclusion zone", "not wearing a seatbelt",
+    "was not removed", "bypass", "removed the guard", "without a permit", "not informed",
 ]
 
-# Barrier defeat: fails Gate 2 but maps to no LSR category (see LifeSavingRule docstring).
-_CONTROL_DEFEAT_CUES = ["bypass", "removed the guard", "guard was removed", "disabled", "interlock", "defeated"]
+# Gate 3: potential severity of the hazard if a small realistic thing went differently.
+# Independent of whether the control held — a barrier that holds does not shrink the hazard.
+_RULE_SEVERITY: dict[LSRRule, int] = {
+    LSRRule.CONFINED_SPACE: 5,
+    LSRRule.ENERGY_ISOLATION: 4,
+    LSRRule.WORK_AT_HEIGHT: 4,
+    LSRRule.LIFTING: 4,
+    LSRRule.LINE_OF_FIRE: 4,
+    LSRRule.HOT_WORK: 4,
+    LSRRule.DRIVING: 4,
+    LSRRule.PERMIT_TO_WORK: 4,
+    LSRRule.NONE: 1,
+}
 
-_SEVERITY_CUES = ["amputat", "fatal", "died", "hospitaliz", "hospitalis", "fracture", "burn", "crush", "unconscious"]
+_MIN_WORDS = 8
 
 
 def _seed(text: str) -> int:
     return int(hashlib.sha256(text.strip().lower().encode()).hexdigest()[:8], 16)
 
 
-def _find(narrative: str, terms: list[str]) -> tuple[str, int, int] | None:
-    low = narrative.lower()
+def _first_hit(text: str, terms: list[str]) -> str | None:
+    """Return the matched text expanded to whole words.
+
+    Cues like "isolat" are stems so they catch isolated/isolation, but a flagged phrase is
+    highlighted verbatim in the UI — "isolat" reads as a bug. Expand to word boundaries.
+    """
+    low = text.lower()
     for term in terms:
         idx = low.find(term)
-        if idx != -1:
-            end = min(len(narrative), idx + len(term))
-            return narrative[idx:end], idx, end
+        if idx == -1:
+            continue
+        start, end = idx, idx + len(term)
+        while start > 0 and (text[start - 1].isalnum() or text[start - 1] in "-"):
+            start -= 1
+        while end < len(text) and (text[end].isalnum() or text[end] in "-"):
+            end += 1
+        return text[start:end]
     return None
 
 
-def classify_stub(narrative: str, report_id: str | None = None) -> Classification:
-    seed = _seed(narrative)
-    spans: list[EvidenceSpan] = []
+def classify_stub(report_text: str) -> ClassificationResult:
+    """Three gates over keyword cues. Returns the locked ClassificationResult."""
+    seed = _seed(report_text)
+    flagged: list[str] = []
 
-    # Gate 1 — high energy present
-    energy = EnergySource.NONE
-    g1_reason = "No high-energy source named in the narrative."
-    for source, terms in _ENERGY_CUES:
-        hit = _find(narrative, terms)
+    # Gate 1 — hazard, categorised by Life-Saving Rule
+    rule = LSRRule.NONE
+    for candidate, terms in _RULE_CUES:
+        hit = _first_hit(report_text, terms)
         if hit:
-            energy = source
-            text, start, end = hit
-            spans.append(EvidenceSpan(text=text, start=start, end=end, gate=1))
-            g1_reason = f"Narrative indicates {source.value} energy ({text!r})."
+            rule, _ = candidate, flagged.append(hit)
             break
-    g1 = energy is not EnergySource.NONE
 
-    # Gate 2 — direct control absent, ineffective, or bypassed
-    lsr = LifeSavingRule.NONE
-    g2_reason = "No explicit control failure identified."
-    for rule, terms in _CONTROL_FAILURE_CUES:
-        hit = _find(narrative, terms)
-        if hit:
-            lsr = rule
-            text, start, end = hit
-            spans.append(EvidenceSpan(text=text, start=start, end=end, gate=2))
-            g2_reason = f"Suggests a breach of the {rule.value.replace('_', ' ')} rule ({text!r})."
-            break
-    defeat = _find(narrative, _CONTROL_DEFEAT_CUES)
-    if defeat and lsr is LifeSavingRule.NONE:
-        text, start, end = defeat
-        spans.append(EvidenceSpan(text=text, start=start, end=end, gate=2))
-        g2_reason = f"Barrier defeated or disabled ({text!r})."
-
-    # Rubric §4.2: a high-energy event that reached a person implies the control did not hold.
-    g2 = lsr is not LifeSavingRule.NONE or defeat is not None or (g1 and seed % 5 != 0)
-    if g2 and lsr is LifeSavingRule.NONE:
-        g2_reason = "High-energy contact occurred; no functioning direct control evidenced (rubric §4.2)."
-
-    # Gate 3 — serious injury plausible
-    sev = _find(narrative, _SEVERITY_CUES)
-    if sev:
-        text, start, end = sev
-        spans.append(EvidenceSpan(text=text, start=start, end=end, gate=3))
-        g3, g3_reason = True, f"Actual outcome severity ({text!r}) satisfies Gate 3 by default."
-    elif g1:
-        g3, g3_reason = True, "A small shift in position or timing plausibly yields a life-altering injury."
+    if len(report_text.split()) < _MIN_WORDS:
+        hazard = HazardAssessment.INSUFFICIENT_INFORMATION
+    elif rule is not LSRRule.NONE:
+        hazard = HazardAssessment.YES
     else:
-        g3, g3_reason = False, "No plausible pathway to a life-altering injury."
+        hazard = HazardAssessment.NO
 
-    too_thin = len(narrative.split()) < 8
-    if too_thin:
-        label = Label.UNCLEAR
+    # Gate 2 — control status
+    control: ControlStatus | None = None
+    if hazard is HazardAssessment.YES:
+        if hit := _first_hit(report_text, _CONTROL_ABSENT_CUES):
+            control, _ = ControlStatus.ABSENT, flagged.append(hit)
+        elif hit := _first_hit(report_text, _CONTROL_FAILED_CUES):
+            control, _ = ControlStatus.FAILED, flagged.append(hit)
+        elif hit := _first_hit(report_text, _CONTROL_PRESENT_CUES):
+            control, _ = ControlStatus.PRESENT, flagged.append(hit)
+        else:
+            control = ControlStatus.UNCLEAR
+    elif hazard is HazardAssessment.INSUFFICIENT_INFORMATION:
+        control = ControlStatus.UNCLEAR
+
+    # Gate 3 — plausible variation, expressed as potential severity
+    if hazard is HazardAssessment.YES:
+        severity = _RULE_SEVERITY[rule]
+    elif hazard is HazardAssessment.INSUFFICIENT_INFORMATION:
+        severity = 2
+    else:
+        severity = 1
+
+    is_precursor = (
+        hazard is HazardAssessment.YES
+        and control in (ControlStatus.ABSENT, ControlStatus.FAILED)
+        and severity >= 4
+    )
+
+    if hazard is HazardAssessment.INSUFFICIENT_INFORMATION:
+        reasoning = "Report text is too short to judge the hazard; routed for human review rather than scored."
         confidence = 0.30 + (seed % 15) / 100
-        rationale = "Narrative too thin to judge the gates (rubric §3)."
-    elif g1 and g2 and g3:
-        label = Label.SIF_PRECURSOR
-        confidence = 0.72 + (seed % 25) / 100
-        rationale = "All three gates pass: high energy present, direct control failed, serious injury plausible."
+    elif hazard is HazardAssessment.NO:
+        reasoning = "No Life-Saving Rule hazard identified in the text, so Gate 1 stops the assessment."
+        confidence = 0.62 + (seed % 28) / 100
+    elif control is ControlStatus.PRESENT:
+        reasoning = (
+            f"Hazard present ({rule.value}), but the text states the barrier was in place and functioned. "
+            "Gate 2 stops the assessment: a control that held is not a precursor."
+        )
+        confidence = 0.70 + (seed % 24) / 100
+    elif is_precursor:
+        reasoning = (
+            f"Hazard present ({rule.value}) with the direct control {control.value}; a small realistic "
+            f"change in timing or position plausibly yields a severity-{severity} outcome. All three gates pass."
+        )
+        confidence = 0.71 + (seed % 26) / 100
     else:
-        label = Label.NOT_SIF
-        confidence = 0.65 + (seed % 30) / 100
-        failed = "Gate 1" if not g1 else ("Gate 2" if not g2 else "Gate 3")
-        rationale = f"{failed} does not pass, so the report is not a SIF precursor."
+        reasoning = (
+            f"Hazard present ({rule.value}) with control status {control.value if control else 'unknown'}, "
+            f"but potential severity {severity} does not reach the life-altering threshold at Gate 3."
+        )
+        confidence = 0.64 + (seed % 26) / 100
 
-    return Classification(
-        report_id=report_id,
-        label=label,
+    return ClassificationResult(
+        hazard_assessment=hazard,
+        lsr_rule=rule,
+        control_status=control,
+        severity=severity,
+        is_sif_precursor=is_precursor,
         confidence=round(min(confidence, 0.99), 2),
-        gates=Gates(
-            gate_1_high_energy=Gate(passed=None if too_thin else g1, rationale=g1_reason),
-            gate_2_control_failed=Gate(passed=None if too_thin else g2, rationale=g2_reason),
-            gate_3_serious_injury_plausible=Gate(passed=None if too_thin else g3, rationale=g3_reason),
-        ),
-        energy_source=energy,
-        lsr=lsr,
-        rationale=rationale,
-        evidence_spans=spans,
-        model=ModelName.STUB,
-        model_version=MODEL_VERSION,
-        rubric_version="1.0",
-        offline_fallback=False,
-        latency_ms=40 + seed % 260,
-        created_at=datetime.now(timezone.utc),
+        flagged_phrases=flagged,
+        reasoning=reasoning,
+        recommended_check=recommended_check_for(rule, is_precursor),
     )
 
 
 # ---------------------------------------------------------------------------
-# Fake dataset for screens 2 and 3
+# Seeded dataset — master plan §6
 # ---------------------------------------------------------------------------
+# Ten fixed sites, deliberately uneven, so "Rig 4 had eleven this quarter" exists.
+# Rig 4 is seeded with 11 energy_isolation precursors, 9 of them on night shift.
+# Positive class across the 150 synthetic rows is 33/150 = 22%, inside the plan's 20-25% band.
+# Two sites sit under MIN_GROUP_N so the small-denominator guard has something to catch.
 
-_NARRATIVES: list[tuple[str, str, str, str, str]] = [
-    ("osha", "Employee was working on a scaffold approximately 5 meters above grade with no guardrail installed. He stepped backward and fell to the concrete below, fracturing his pelvis.", "Apex Construction LLC", "TX", "2025-01-14"),
-    ("osha", "While clearing a jam, the employee reached into the conveyor which was still running. Lockout was not applied. His sleeve was caught in the pinch point and his index finger was amputated.", "Midland Foods Inc", "OH", "2025-01-22"),
-    ("osha", "Employee slipped on a wet floor in the break room and fractured his wrist.", "Northline Logistics", "IL", "2025-02-03"),
-    ("osha", "An electrician opened a 480 volt panel to troubleshoot without de-energizing. An arc flash occurred, causing second degree burns to the face and hands.", "Grid Services Co", "PA", "2025-02-11"),
-    ("synthetic", "During a lift, the crane load swung over the crew because taglines were not used. The load was set down without contact and no one was injured.", "Harbor Steel Erectors", "WA", "2025-02-19"),
-    ("osha", "Employee was lifting a 20 kg box from a pallet and strained his lower back. He was hospitalized overnight for observation.", "Central Warehouse Group", "GA", "2025-03-02"),
-    ("osha", "Worker was in a 2.5 meter trench with no protective system in place when the wall sloughed in, burying him to the waist. He was freed by coworkers.", "Rivera Excavation", "AZ", "2025-03-08"),
-    ("synthetic", "A forklift operator reversed without a spotter in a congested aisle and struck a pedestrian worker, fracturing the worker's leg.", "Summit Distribution", "NC", "2025-03-15"),
-    ("osha", "Employee was injured at the facility and was taken to the hospital.", "Unnamed Employer", "FL", "2025-03-21"),
-    ("synthetic", "During hot work on a tank, no fire watch was posted and no gas test was performed. Vapors ignited, causing a flash fire; the welder sustained burns to both arms.", "Delta Fabrication", "LA", "2025-04-02"),
-    ("osha", "Worker fell 4 meters from structural steel. His harness and lanyard arrested the fall at a rated anchor point and he was not injured.", "Ironclad Erectors", "MO", "2025-04-09"),
-    ("synthetic", "A hydraulic hose under pressure burst during maintenance because the system was not depressurized first, spraying fluid and injuring the technician's eye.", "Precision Hydraulics", "MI", "2025-04-17"),
-    ("osha", "Employee struck his thumb with a hammer while framing and sustained a fracture.", "Homefront Builders", "CO", "2025-04-24"),
-    ("synthetic", "A maintenance technician bypassed the interlock on a robotic cell to observe a fault and entered while the arm was live. The arm cycled and pinned him against the fence.", "Nova Automation", "IN", "2025-05-06"),
-    ("osha", "A driver failed to wear a seatbelt and was ejected during a rollover on a haul road. He sustained spinal injuries.", "Redrock Mining Services", "NV", "2025-05-13"),
+_EQUIPMENT = [
+    "pump starter panel", "compressor control panel", "conveyor drive housing",
+    "wellhead actuator", "gas booster starter", "MCC cubicle", "separator pump breaker",
+    "mud pump starter", "crane hoist panel", "heater control panel", "injection pump starter",
+    "dosing skid panel", "flare igniter panel", "transfer pump starter",
+]
+_LOCATIONS = ["north", "east", "west", "south", "upper deck", "lower deck", "cellar"]
+_LOADS = ["casing bundle", "pipe rack", "valve skid", "drill collar", "tank section"]
+_VESSELS = ["separator vessel", "storage tank", "process drum", "surge vessel"]
+_LINES = ["flare line", "produced-water line", "gas header", "condensate line"]
+_ROADS = ["Duliajan", "Moran", "Kumchai", "Jorhat"]
+_TASKS = ["hydrojetting", "insulation stripping", "valve replacement", "coating repair"]
+
+
+def _precursor_text(rule: LSRRule, n: int) -> str:
+    if rule is LSRRule.ENERGY_ISOLATION:
+        return (
+            f"Technician opened the {_EQUIPMENT[n % len(_EQUIPMENT)]} to clear a fault. "
+            "The circuit was not isolated and no lockout was applied before the cover came off."
+        )
+    if rule is LSRRule.WORK_AT_HEIGHT:
+        return (
+            f"Fitter worked from the {_LOCATIONS[n % len(_LOCATIONS)]} scaffold where no guardrail "
+            "was fitted, and his harness was not clipped to any anchor."
+        )
+    if rule is LSRRule.LIFTING:
+        return (
+            f"The crane lifted a {_LOADS[n % len(_LOADS)]} with no taglines and the load travelled "
+            "over the crew; no exclusion zone was set."
+        )
+    if rule is LSRRule.CONFINED_SPACE:
+        return (
+            f"Two workers entered the {_VESSELS[n % len(_VESSELS)]} for cleaning. "
+            "No gas test was recorded and no attendant was posted at the manhole."
+        )
+    if rule is LSRRule.HOT_WORK:
+        return (
+            f"Welding proceeded on the {_LINES[n % len(_LINES)]} with no fire watch posted, "
+            "and flammable residue in the area was not removed beforehand."
+        )
+    if rule is LSRRule.LINE_OF_FIRE:
+        return (
+            f"Operator stood in the line of fire of a pressurised line while the "
+            f"{_LOCATIONS[n % len(_LOCATIONS)]} flange was broken; no exclusion zone was set."
+        )
+    if rule is LSRRule.DRIVING:
+        return (
+            f"A light vehicle was driven at speed on the {_ROADS[n % len(_ROADS)]} approach road "
+            "and the driver was not wearing a seatbelt."
+        )
+    return (
+        f"Contractor crew began {_TASKS[n % len(_TASKS)]} with no permit raised for the scope, "
+        "and the area owner was not informed."
+    )
+
+
+def _barrier_held_text(n: int) -> str:
+    """The ambiguous demo case (plan §12.2): hazard real, barrier held, NOT a precursor."""
+    return (
+        f"Fitter slipped while moving along the {_LOCATIONS[n % len(_LOCATIONS)]} scaffold. "
+        "His harness was clipped to a rated anchor and the fall arrest system functioned as designed; "
+        "he was recovered to the deck unhurt."
+    )
+
+
+def _low_hazard_text(n: int) -> str:
+    return (
+        f"During routine inspection a worker reported damaged paint coating on the "
+        f"{_LOCATIONS[n % len(_LOCATIONS)]} walkway handrail and requested a touch-up."
+    )
+
+
+def _thin_text(n: int) -> str:
+    return f"Issue reported at {_LOCATIONS[n % len(_LOCATIONS)]} area."
+
+
+# site -> (report_count, precursor_count, rules used for its precursors)
+_SITE_PLAN: list[tuple[str, int, int, list[LSRRule]]] = [
+    ("Rig 4", 20, 11, [LSRRule.ENERGY_ISOLATION]),
+    ("Moran Gas Plant", 18, 6, [LSRRule.HOT_WORK, LSRRule.CONFINED_SPACE]),
+    ("Duliajan Field", 24, 6, [LSRRule.WORK_AT_HEIGHT, LSRRule.LIFTING]),
+    ("Pipeline Sector 3", 16, 3, [LSRRule.LINE_OF_FIRE, LSRRule.PERMIT_TO_WORK]),
+    ("Rig 7", 22, 3, [LSRRule.WORK_AT_HEIGHT, LSRRule.ENERGY_ISOLATION]),
+    ("Jorhat Workover", 17, 2, [LSRRule.LIFTING]),
+    ("Baghjan Wellpad", 15, 1, [LSRRule.DRIVING]),
+    ("Kumchai Drilling", 11, 0, []),
+    ("Naharkatiya Depot", 4, 1, [LSRRule.WORK_AT_HEIGHT]),  # under MIN_GROUP_N
+    ("Makum Terminal", 3, 0, []),  # under MIN_GROUP_N
 ]
 
+_ACTIVITY_FOR_RULE: dict[LSRRule, str] = {
+    LSRRule.ENERGY_ISOLATION: "maintenance",
+    LSRRule.WORK_AT_HEIGHT: "workover",
+    LSRRule.LIFTING: "lifting",
+    LSRRule.CONFINED_SPACE: "confined_space_entry",
+    LSRRule.HOT_WORK: "hot_work",
+    LSRRule.LINE_OF_FIRE: "maintenance",
+    LSRRule.DRIVING: "transport",
+    LSRRule.PERMIT_TO_WORK: "inspection",
+    LSRRule.NONE: "inspection",
+}
 
-def _report_id(i: int) -> str:
-    return f"stub-{i + 1:04d}"
+_BASE_DATE = date(2026, 1, 1)
 
 
-def _build_reports() -> list[ReportDetail]:
+def _build() -> list[ReportDetail]:
     reports: list[ReportDetail] = []
-    for i, (source, narrative, employer, state, date) in enumerate(_NARRATIVES):
-        result = classify_stub(narrative, report_id=_report_id(i))
-        seed = _seed(narrative)
+    counter = 0
+
+    for site, n_reports, n_precursors, rules in _SITE_PLAN:
+        for i in range(n_reports):
+            counter += 1
+            report_id = f"syn-{counter:04d}"
+
+            if i < n_precursors:
+                rule = rules[i % len(rules)]
+                text = _precursor_text(rule, counter)
+                activity = _ACTIVITY_FOR_RULE[rule]
+                # Rig 4's story: exactly 9 of its 11 precursors fall on night shift.
+                if site == "Rig 4":
+                    shift = "night" if i < 9 else "day"
+                else:
+                    shift = "night" if i % 3 == 0 else "day"
+            else:
+                kind = (i - n_precursors) % 3
+                text = (_barrier_held_text, _low_hazard_text, _thin_text)[kind](counter)
+                activity = "inspection" if kind else "workover"
+                shift = "night" if i % 4 == 0 else "day"
+
+            result = classify_stub(text)
+            seed = _seed(text)
+            report_date = _BASE_DATE + timedelta(days=(counter * 5) % 180)
+            created = datetime(
+                report_date.year, report_date.month, report_date.day, 6 + seed % 12,
+                seed % 60, tzinfo=timezone.utc,
+            )
+
+            reports.append(
+                ReportDetail(
+                    report_id=report_id,
+                    report_text=text,
+                    source="synthetic",
+                    site=site,
+                    activity=activity,
+                    shift=shift,  # type: ignore[arg-type]
+                    report_date=report_date,
+                    is_contractor=bool(seed % 3),
+                    is_sif_precursor=result.is_sif_precursor,
+                    severity=result.severity,
+                    lsr_rule=result.lsr_rule,
+                    control_status=result.control_status,
+                    confidence=result.confidence,
+                    created_at=created,
+                    # Triage latency: seconds between report arriving and being classified.
+                    classified_at=created + timedelta(seconds=2 + seed % 11),
+                    model_version=MODEL_VERSION,
+                    result=result,
+                )
+            )
+
+    # 30 OSHA-shaped placeholders. No site taxonomy, so excluded from every aggregate.
+    for i in range(30):
+        text = _precursor_text(list(_RULE_SEVERITY)[i % 8], 1000 + i) if i % 3 == 0 else _low_hazard_text(1000 + i)
+        result = classify_stub(text)
+        seed = _seed(text + str(i))
+        report_date = _BASE_DATE + timedelta(days=(i * 7) % 180)
+        created = datetime(report_date.year, report_date.month, report_date.day, 9, seed % 60, tzinfo=timezone.utc)
         reports.append(
             ReportDetail(
-                id=_report_id(i),
-                source=source,  # type: ignore[arg-type]
-                narrative=narrative,
-                employer=employer,
-                state=state,
-                city=None,
-                incident_date=date,
-                naics_code=str(230000 + seed % 9000),
-                # Gold labels agree with the stub here; real gold arrives from Phase 2 labeling.
-                gold_label=Label(result.label),
-                predicted_label=Label(result.label),
+                report_id=f"osha-placeholder-{i + 1:02d}",
+                report_text=text,
+                source="osha",
+                site=None,
+                activity=None,
+                shift=None,
+                report_date=report_date,
+                is_contractor=None,
+                is_sif_precursor=result.is_sif_precursor,
+                severity=result.severity,
+                lsr_rule=result.lsr_rule,
+                control_status=result.control_status,
                 confidence=result.confidence,
-                energy_source=EnergySource(result.energy_source),
-                lsr=LifeSavingRule(result.lsr),
-                hospitalized=bool(seed % 2),
-                amputation="amputat" in narrative.lower(),
-                body_part=None,
-                event_type=None,
-                classification=result,
+                created_at=created,
+                classified_at=created + timedelta(seconds=3 + seed % 9),
+                model_version=MODEL_VERSION,
+                result=result,
             )
         )
+
     return reports
 
 
-REPORTS: list[ReportDetail] = _build_reports()
+REPORTS: list[ReportDetail] = _build()
+
+# Guard the seeded story: if a template edit breaks the demo numbers, fail loudly at import
+# rather than silently on stage.
+_rig4 = [r for r in REPORTS if r.site == "Rig 4" and r.is_sif_precursor]
+assert len(_rig4) == 11, f"Rig 4 should seed 11 precursors, got {len(_rig4)}"
+assert all(r.lsr_rule is LSRRule.ENERGY_ISOLATION for r in _rig4), "Rig 4 precursors must be energy_isolation"
+assert len([r for r in _rig4 if r.shift == "night"]) == 9, "Rig 4 should seed 9 night-shift precursors"
+
+_syn = [r for r in REPORTS if r.source == "synthetic"]
+assert len(_syn) == 150, f"expected 150 synthetic reports, got {len(_syn)}"
+_rate = len([r for r in _syn if r.is_sif_precursor]) / len(_syn)
+assert 0.20 <= _rate <= 0.25, f"positive class {_rate:.3f} outside the plan's 20-25% band"
 
 
 def list_reports(
     limit: int = 20,
     offset: int = 0,
-    label: str | None = None,
-    energy_source: str | None = None,
+    is_sif_precursor: bool | None = None,
+    lsr_rule: str | None = None,
+    site: str | None = None,
+    source: str | None = None,
     q: str | None = None,
 ) -> tuple[list[ReportSummary], int]:
     items = REPORTS
-    if label:
-        items = [r for r in items if r.predicted_label == label]
-    if energy_source:
-        items = [r for r in items if r.energy_source == energy_source]
+    if is_sif_precursor is not None:
+        items = [r for r in items if r.is_sif_precursor is is_sif_precursor]
+    if lsr_rule:
+        items = [r for r in items if r.lsr_rule == lsr_rule]
+    if site:
+        items = [r for r in items if r.site == site]
+    if source:
+        items = [r for r in items if r.source == source]
     if q:
         needle = q.lower()
-        items = [r for r in items if needle in r.narrative.lower() or needle in (r.employer or "").lower()]
+        items = [r for r in items if needle in r.report_text.lower()]
     total = len(items)
-    page = items[offset : offset + limit]
-    return [ReportSummary(**r.model_dump(include=set(ReportSummary.model_fields))) for r in page], total
+    fields = set(ReportSummary.model_fields)
+    page = [ReportSummary(**r.model_dump(include=fields)) for r in items[offset : offset + limit]]
+    return page, total
 
 
 def get_report(report_id: str) -> ReportDetail | None:
-    return next((r for r in REPORTS if r.id == report_id), None)
-
-
-def _counts(values: list[str]) -> list[CountBucket]:
-    tally: dict[str, int] = {}
-    for v in values:
-        tally[v] = tally.get(v, 0) + 1
-    return [CountBucket(key=k, count=c) for k, c in sorted(tally.items(), key=lambda kv: -kv[1])]
-
-
-def dashboard_summary() -> DashboardSummary:
-    total = len(REPORTS)
-    precursors = [r for r in REPORTS if r.predicted_label == Label.SIF_PRECURSOR.value]
-    return DashboardSummary(
-        total_reports=total,
-        labeled_reports=total,
-        precursor_count=len(precursors),
-        precursor_rate=round(len(precursors) / total, 3) if total else 0.0,
-        by_label=_counts([r.predicted_label.value for r in REPORTS if r.predicted_label]),
-        by_energy_source=_counts([r.energy_source.value for r in REPORTS if r.energy_source]),
-        by_lsr=_counts([r.lsr.value for r in REPORTS if r.lsr and r.lsr != LifeSavingRule.NONE]),
-        by_month=_counts([(r.incident_date or "")[:7] for r in REPORTS if r.incident_date]),
-        model_health=ModelHealth(
-            active_model=ModelName.STUB,
-            offline_fallback_active=False,
-            f1=None,
-            pr_auc=None,
-            last_eval_at=None,
-        ),
-    )
+    return next((r for r in REPORTS if r.report_id == report_id), None)

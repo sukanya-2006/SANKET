@@ -8,7 +8,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="SIF Precursor Detection API",
-    description="AI/NLP engine to detect SIF precursors — SIH 2026. Phase 1: stub responses.",
+    description="AI/NLP engine to detect SIF precursors — SIH 2026 (PS SIH26165). Phase 1: stub responses.",
     version="0.1.0",
 )
 
