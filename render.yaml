@@ -1,0 +1,22 @@
+# Render deployment — Member 6.
+# The API is stateless apart from the SQLite cache, which lives on the instance disk and is
+# rebuilt on demand, so a free-tier restart costs nothing but a cold cache.
+services:
+  - type: web
+    name: sif-detector-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Set these in the Render dashboard, never in this file.
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

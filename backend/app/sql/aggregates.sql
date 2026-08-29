@@ -105,8 +105,7 @@ ORDER BY report_count DESC;
 
 -- ---------------------------------------------------------------------------
 -- name: activities_ranked
--- Same shape as sites_ranked, grouped by activity. Swap r.site for r.activity in
--- the insufficient-volume variant too.
+-- Same shape as sites_ranked, grouped by activity.
 -- ---------------------------------------------------------------------------
 SELECT r.activity,
        count(*)                                   AS report_count,
@@ -122,6 +121,26 @@ WHERE r.source <> 'osha'
 GROUP BY r.activity
 HAVING count(*) >= %(min_group_n)s
 ORDER BY precursor_rate DESC, precursor_count DESC;
+
+
+-- ---------------------------------------------------------------------------
+-- name: activities_insufficient_volume
+-- The activities that fell below the guard, so the UI greys them out.
+-- ---------------------------------------------------------------------------
+SELECT r.activity,
+       count(*)                                   AS report_count,
+       count(*) FILTER (WHERE l.is_sif_precursor) AS precursor_count,
+       avg(l.is_sif_precursor::int)               AS precursor_rate,
+       mode() WITHIN GROUP (ORDER BY l.lsr_rule)
+           FILTER (WHERE l.is_sif_precursor)      AS top_rule
+FROM reports r
+JOIN latest_predictions l ON l.report_id = r.report_id
+WHERE r.source <> 'osha'
+  AND l.model_version = %(model_version)s
+  AND r.activity IS NOT NULL
+GROUP BY r.activity
+HAVING count(*) < %(min_group_n)s
+ORDER BY report_count DESC;
 
 
 -- ---------------------------------------------------------------------------

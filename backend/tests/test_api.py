@@ -1,17 +1,17 @@
 """Contract tests — the ten named in TECH_STACK v2 "Testing".
 
-These assert the shape Member 5 builds against and the aggregation rules a judge will probe.
-They must keep passing after Phase 3 swaps the stub for the real pipeline; that is the point.
+These assert the shape Member 5 builds against, the resilience behaviour Member 6 will be asked
+about, and the aggregation rules a judge will probe. They must keep passing after Member 2's
+classifiers replace the stub — that is the point of them.
 
-Three of the ten cover machinery that does not exist until Phase 3/4 (schema-validation retry,
-fallback trigger, cache hit). They are present and explicitly skipped rather than faked, so the
-suite never overstates what is built. The pitch may claim a test suite only because it exists.
+All ten are real. The cache, retry and fallback tests drive the actual machinery in
+app/classifier.py by registering deliberately broken classifiers; nothing here is faked.
 """
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import aggregate
+from app import aggregate, repository
 from app.main import app
 from app.schemas import LSRRule
 
@@ -90,19 +90,174 @@ def test_malformed_input_is_rejected(payload):
 # --- 3, 4, 5. Phase 3/4 machinery -------------------------------------------------------
 
 
-@pytest.mark.skip(reason="Phase 3: schema-validation retry lands with the Claude classifier")
-def test_schema_validation_retries_once_then_falls_back():
-    ...
+@pytest.fixture
+def swap_classifiers():
+    """Register stand-in classifiers, then restore the real registry."""
+    from app import classifier
+
+    original_primary = classifier._primary
+    original_baseline = classifier._baseline
+
+    def _swap(primary=None, baseline=None):
+        if primary is not None:
+            classifier.register_primary(primary)
+        if baseline is not None:
+            classifier.register_baseline(baseline)
+
+    yield _swap
+    classifier.register_primary(original_primary)
+    classifier.register_baseline(original_baseline)
 
 
-@pytest.mark.skip(reason="Phase 4: offline fallback lands at Stage 4, ~day 7")
-def test_api_failure_triggers_tfidf_fallback_and_sets_is_fallback():
-    ...
+def _baseline_stub():
+    from app.stub import classify_stub
+
+    def baseline(text):
+        return classify_stub(text)
+
+    baseline.version = "tfidf-test"
+    return baseline
 
 
-@pytest.mark.skip(reason="Phase 3: SQLite cache keyed on sha256(report_text + prompt_version)")
-def test_repeat_report_text_hits_the_cache():
-    ...
+def test_schema_validation_retries_once_then_falls_back(swap_classifiers):
+    """A model returning malformed output must not reach the database.
+
+    Retry once, then degrade to the baseline - and count it, so hallucination becomes a logged
+    rate rather than an unbounded risk.
+    """
+    from app import classifier
+
+    calls = []
+
+    def malformed(text):
+        calls.append(text)
+        return {"hazard_assessment": "definitely", "severity": 99}
+
+    malformed.version = "claude-test"
+    swap_classifiers(primary=malformed, baseline=_baseline_stub())
+
+    outcome = classifier.classify(PRECURSOR_TEXT)
+
+    assert len(calls) == 2, "should attempt once, retry once, then stop"
+    assert outcome.is_fallback is True
+    assert outcome.model_version == "tfidf-test"
+    metrics = classifier.metrics()
+    assert metrics["schema_failures"] == 2
+    assert metrics["retries"] == 1
+    assert metrics["fallbacks"] == 1
+
+
+def test_valid_output_on_the_retry_is_accepted(swap_classifiers):
+    """One bad response should not condemn the call to degraded mode."""
+    from app import classifier
+
+    attempts = {"n": 0}
+
+    def flaky(text):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            return {"nonsense": True}
+        from app.stub import classify_stub
+
+        return classify_stub(text)
+
+    flaky.version = "claude-test"
+    swap_classifiers(primary=flaky, baseline=_baseline_stub())
+
+    outcome = classifier.classify(PRECURSOR_TEXT)
+    assert attempts["n"] == 2
+    assert outcome.is_fallback is False
+    assert outcome.model_version == "claude-test"
+
+
+def test_api_failure_triggers_baseline_fallback_and_sets_is_fallback(swap_classifiers):
+    """The resilience answer: the live box keeps working when the API does not."""
+
+    def broken(text):
+        raise ConnectionError("API unreachable")
+
+    broken.version = "claude-test"
+    swap_classifiers(primary=broken, baseline=_baseline_stub())
+
+    body = client.post("/analyze", json={"report_text": PRECURSOR_TEXT}).json()
+    assert body["is_fallback"] is True
+    assert body["model_version"] == "tfidf-test"
+    assert body["result"]["is_sif_precursor"] is True
+
+
+def test_timeout_falls_back_rather_than_hanging(swap_classifiers):
+    """A wedged connection must not hold the stage hostage."""
+    import time
+
+    from app import classifier
+    from app.config import get_settings
+
+    def slow(text):
+        time.sleep(2)
+        return {}
+
+    slow.version = "claude-test"
+    swap_classifiers(primary=slow, baseline=_baseline_stub())
+
+    settings = get_settings()
+    object.__setattr__(settings, "llm_timeout_seconds", 0.2)
+    try:
+        started = time.perf_counter()
+        outcome = classifier.classify(PRECURSOR_TEXT)
+        elapsed = time.perf_counter() - started
+    finally:
+        object.__setattr__(settings, "llm_timeout_seconds", 10.0)
+
+    assert outcome.is_fallback is True
+    assert elapsed < 1.5, "should give up at the timeout, not wait for the slow call"
+
+
+def test_both_classifiers_down_returns_503_not_a_guess(swap_classifiers):
+    """We would rather say nothing than invent a safety judgement."""
+
+    def broken(text):
+        raise ConnectionError("down")
+
+    broken.version = "claude-test"
+
+    def also_broken(text):
+        raise RuntimeError("also down")
+
+    also_broken.version = "tfidf-test"
+    swap_classifiers(primary=broken, baseline=also_broken)
+
+    assert client.post("/analyze", json={"report_text": PRECURSOR_TEXT}).status_code == 503
+
+
+def test_repeat_report_text_hits_the_cache(swap_classifiers):
+    """Keyed on sha256(report_text + prompt_version): reproducible evals, wifi-proof demos."""
+    from app import cache, classifier
+
+    calls = []
+
+    def counting(text):
+        calls.append(text)
+        from app.stub import classify_stub
+
+        return classify_stub(text)
+
+    counting.version = "claude-test"
+    swap_classifiers(primary=counting, baseline=_baseline_stub())
+
+    first = classifier.classify(PRECURSOR_TEXT)
+    second = classifier.classify(PRECURSOR_TEXT)
+
+    assert len(calls) == 1, "second call must be served from cache"
+    assert first.from_cache is False and second.from_cache is True
+    assert second.result.is_sif_precursor == first.result.is_sif_precursor
+    assert cache.size() == 1
+
+
+def test_changing_the_prompt_version_invalidates_the_cache():
+    """Otherwise an eval quietly mixes answers produced by two different prompts."""
+    from app import cache
+
+    assert cache.cache_key(PRECURSOR_TEXT, "v1") != cache.cache_key(PRECURSOR_TEXT, "v2")
 
 
 # --- 6. Rate correctness ----------------------------------------------------------------
@@ -150,7 +305,7 @@ def fixture_reports(monkeypatch):
     n += 1
     rows.append(row(n, None, True, source="osha"))
 
-    monkeypatch.setattr(aggregate, "REPORTS", rows)
+    monkeypatch.setattr(repository, "all_reports", lambda: rows)
     return rows
 
 
@@ -337,7 +492,43 @@ def test_recommended_check_is_not_persisted():
 
 
 def test_api_runs_without_a_database():
+    """Member 5 is never blocked on an instance being awake; the demo survives a sleeping DB."""
     from app import db
 
     assert db.is_live() is False
-    assert client.get("/health").json()["database"] == "not_configured"
+    health = client.get("/health").json()
+    assert health["status"] == "ok"
+    assert health["database"] == "not_configured"
+    assert health["data_source"] == "seeded_stub"
+    assert health["primary_classifier"] == "stub-0.1.0"
+
+
+def test_meta_exposes_measured_model_health():
+    body = client.get("/meta").json()
+    assert body["rubric_version"] == "2.0"
+    assert set(body["lsr_rule"]) == {r.value for r in LSRRule}
+    assert body["sites"] and body["activities"]
+    assert "schema_failure_rate" in body["metrics"]
+    assert "fallback_rate" in body["metrics"]
+
+
+def test_every_named_sql_statement_parses():
+    """aggregate.py asks for these by name; a typo must fail here, not during the demo."""
+    from app import db
+
+    names = set(db.named_statements())
+    assert {
+        "latest_predictions", "summary", "sites_ranked", "sites_insufficient_volume",
+        "activities_ranked", "activities_insufficient_volume", "rules", "shifts", "trend",
+    } <= names
+    for name in names:
+        assert db.statement(name).strip()
+
+
+def test_queue_puts_precursors_first_then_severity():
+    """The ranked order is the product, so it lives in the API, not in the client."""
+    items = client.get("/reports", params={"limit": 40}).json()["items"]
+    flags = [bool(i["is_sif_precursor"]) for i in items]
+    assert flags == sorted(flags, reverse=True), "precursors must lead the queue"
+    severities = [i["severity"] for i in items if i["is_sif_precursor"]]
+    assert severities == sorted(severities, reverse=True)

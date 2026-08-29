@@ -1,16 +1,16 @@
 """API surface — TECH_STACK v2. Paths and field names per NAMES.md.
 
-Phase 1 serves the locked schema from the seeded stub. Phase 3 swaps the producers behind
-`classify()` and `aggregate.*` for Supabase and the real classifiers; these signatures and
-response models do not change.
+Routes are thin on purpose. Classification goes through `classifier.classify`, which owns the
+cache, the timeout, the retry and the fallback; reads go through `repository`, which owns the
+choice between Postgres and the seeded stub. Swapping either out does not touch this file.
 """
 
-import time
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 
-from .. import aggregate
+from .. import aggregate, classifier, db, repository
 from ..config import get_settings
 from ..schemas import (
     ActivityAggregateResponse,
@@ -27,22 +27,26 @@ from ..schemas import (
     SiteAggregateResponse,
     TrendPoint,
 )
-from ..stub import MODEL_VERSION, classify_stub, get_report, list_reports
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/meta", tags=["meta"], summary="Enum values for frontend dropdowns")
+@router.get("/meta", tags=["meta"], summary="Enums, versions and live model metrics")
 def meta() -> dict:
     settings = get_settings()
     return {
         "hazard_assessment": [e.value for e in HazardAssessment],
         "control_status": [e.value for e in ControlStatus],
         "lsr_rule": [e.value for e in LSRRule],
-        "model_version": MODEL_VERSION,
+        "sites": repository.sites(),
+        "activities": repository.activities(),
         "rubric_version": settings.rubric_version,
-        "stub_mode": settings.stub_mode,
+        "prompt_version": settings.prompt_version,
         "min_group_n": aggregate.MIN_GROUP_N,
+        "database": "connected" if db.is_live() else "not_configured",
+        # Schema-failure and fallback rates as measured numbers, not hopes.
+        "metrics": classifier.metrics(),
     }
 
 
@@ -55,18 +59,21 @@ def meta() -> dict:
 def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
     """Classify one free-text report.
 
-    Phase 4 wires the offline fallback here: on Claude API failure or a 10s timeout the local
-    TF-IDF baseline answers and `is_fallback` flips to true, which the UI shows plainly as
-    "degraded mode — keyword baseline". The field is in the contract now so the frontend can
-    build that banner before the fallback exists.
+    `is_fallback` is true when the primary classifier failed, timed out, or returned output the
+    schema rejected twice, and the local baseline answered instead. The UI must show that plainly
+    as "degraded mode — keyword baseline" rather than quietly serving a weaker answer.
     """
-    started = time.perf_counter()
-    result = classify_stub(payload.report_text)
+    try:
+        outcome = classifier.classify(payload.report_text)
+    except classifier.ClassificationUnavailable as exc:
+        # Both classifiers are down. Say so; never invent a label.
+        raise HTTPException(status_code=503, detail=f"classification unavailable: {exc}") from exc
+
     return AnalyzeResponse(
-        result=result,
-        model_version=MODEL_VERSION,
-        is_fallback=False,
-        latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+        result=outcome.result,
+        model_version=outcome.model_version,
+        is_fallback=outcome.is_fallback,
+        latency_ms=outcome.latency_ms,
         created_at=datetime.now(timezone.utc),
     )
 
@@ -86,7 +93,8 @@ def reports(
     source: str | None = None,
     q: str | None = None,
 ) -> ReportPage:
-    items, total = list_reports(
+    """Precursors first, then severity descending. The ranked order is the product."""
+    items, total = repository.list_reports(
         limit=limit,
         offset=offset,
         is_sif_precursor=is_sif_precursor,
@@ -100,7 +108,7 @@ def reports(
 
 @router.get("/reports/{report_id}", response_model=ReportDetail, tags=["reports"])
 def report_detail(report_id: str) -> ReportDetail:
-    found = get_report(report_id)
+    found = repository.get_report(report_id)
     if found is None:
         raise HTTPException(status_code=404, detail=f"report {report_id} not found")
     return found

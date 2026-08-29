@@ -1,0 +1,135 @@
+# Hand-off — Member 3 (Data)
+
+You own report generation with metadata, the OSHA pull, the labelling tool, the evaluation
+script, and you are the first annotator. **You gate Members 2 and 4** — everything downstream is
+meaningless without labels, so labels come first.
+
+**Generate the reports without reading [docs/rubric.md](../rubric.md).** Member 1 wrote it
+without seeing your reports. That independence is what makes the agreement number mean anything,
+and a judge will ask whether you had it.
+
+---
+
+## 1. The dataset — 150 synthetic + 30 OSHA
+
+**150, not 90.** At ~22% positives, a 90-report set leaves roughly six positives in a held-out
+split, and one flipped prediction swings F1 by about eight points. Your headline number becomes
+noise.
+
+**Positive class stays 20–25%.** Never rebalance to 50/50 — it flatters every model and convinces
+nobody experienced.
+
+Every synthetic report carries metadata. Without it, `aggregate.py` has nothing to group by, which
+is the most likely silent failure in the project.
+
+`data/reports_metadata.csv` — these column names exactly, from [NAMES.md](../../NAMES.md):
+
+```
+report_id, report_text, source, site, activity, shift, report_date, is_contractor
+```
+
+- `source` — `synthetic` or `osha`
+- `site` — one of the ten in [backend/app/sql/schema.sql](../../backend/app/sql/schema.sql).
+  **Distribute unevenly on purpose.** If every site has three precursors, the "Rig 4 had eleven
+  this quarter" demo moment does not exist.
+- `shift` — `day` or `night`
+- `site`, `activity`, `shift` may be blank **only** when `source` is `osha`. The loader and the
+  database both refuse a synthetic row without them, with a line number.
+
+Include a handful of **Hindi / Hinglish / code-mixed** reports. They prove the multilingual claim,
+and the rubric §7 tells annotators how to handle them.
+
+The seeded stub in `backend/app/stub.py` shows the shape and distribution that works — treat it
+as a worked example, then delete nothing: the moment your CSV lands, the stub stops being used.
+
+### The 30 OSHA reports
+
+Real OSHA Severe Injury Reports, public and downloadable. Be precise about what they prove: that
+the classifier handles real-world writing nobody on the team produced — **not** that it detects
+precursors in near-miss reports. OSHA records describe injuries that already happened, a different
+population. Someone in the room may know that.
+
+They carry no site taxonomy, so they are excluded from every aggregate. That is a stated
+limitation, not a gap to hide.
+
+---
+
+## 2. Labelling — days 1–6
+
+You and Member 1 label all 180 independently against rubric v2.0, **no discussion until both
+finish**. Batched: first 90 by day 4 so a broken gate surfaces while there is time to fix it,
+the rest by day 6. Member 6 tiebreaks.
+
+`data/gold_labels.csv`:
+
+```
+report_id, annotator, hazard_assessment, lsr_rule, control_status,
+severity, is_sif_precursor, notes, gate_split, rubric_version, is_tiebreak
+```
+
+- `control_status` blank unless `hazard_assessment` is `yes`
+- `gate_split` — 1, 2 or 3, **filled only on Member 6's tiebreak rows**. This column is the whole
+  diagnostic: if agreement lands under 70%, it tells you which gate to revise instead of
+  rewriting the rubric wholesale.
+- `rubric_version` — `2.0`. A label made under 2.0 and one made under 2.1 are not the same
+  measurement.
+- `notes` — mandatory for every `insufficient_information`, every `unclear`, and every hard call.
+
+### Agreement
+
+```python
+from sklearn.metrics import cohen_kappa_score
+kappa = cohen_kappa_score(annotator_1, annotator_3)
+```
+
+Report **both** raw agreement and kappa — kappa subtracts the agreement chance alone would
+produce. Compute it on `is_sif_precursor` first, then per gate, because the per-gate numbers are
+what identify the culprit.
+
+**Below 70%:** the rubric is ambiguous, not the annotators. Member 1 revises only the offending
+gate, bumps to v2.1, and you both re-label only the reports that turned on that gate.
+
+---
+
+## 3. Loading it
+
+```bash
+cd backend
+./.venv/Scripts/python.exe scripts/ingest.py --apply-schema
+./.venv/Scripts/python.exe scripts/ingest.py --reports ../data/reports_metadata.csv
+./.venv/Scripts/python.exe scripts/ingest.py --labels  ../data/gold_labels.csv
+./.venv/Scripts/python.exe scripts/ingest.py --classify
+```
+
+The loader validates column names against NAMES.md and refuses a mismatched file rather than
+silently importing nulls. Needs `SUPABASE_DB_URL` in `backend/.env` — ask Member 4.
+
+---
+
+## 4. `eval/run_eval.py` — artifact #1
+
+One output table. **Two tables plus one line, never a single merged table:**
+
+1. **Synthetic held-out split** — baseline F1/PR-AUC vs LLM F1/PR-AUC. The fair, apples-to-apples
+   fight. ~30 reports for prompt tuning; the held-out set opens exactly **once**, at the end.
+2. **OSHA set — LLM only.** A generalisation check on real writing. Testing the baseline here
+   would measure domain transfer, not model quality: an unfair fight we do not stage.
+3. **Severity MAE** on precursor cases against adjudicated human severity.
+
+Plus annotator agreement % and kappa, reported as **the ceiling**. Quoting your own ceiling is
+the most sophisticated thing a student team can say.
+
+**F1 and PR-AUC, never accuracy.** At ~22% positives, "always say no" scores 78%.
+
+State that you tuned for recall over precision as a deliberate choice: missing a fatal precursor
+costs a life, a false alarm costs twenty minutes.
+
+---
+
+## Your hostile questions
+
+- *"You wrote the reports and graded yourself."* — Intent labels are discarded. Two annotators
+  labelled independently against a written rubric neither of them could negotiate, and a sixth of
+  the set is real OSHA text nobody on the team wrote.
+- *Why hold out a test set* — tuning against your test score fits the model to the answers rather
+  than to the problem.

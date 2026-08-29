@@ -15,17 +15,25 @@ Four rules apply to every aggregate in this module:
 Why rate and not raw count: raw counts penalise sites that report diligently, which is the exact
 opposite of the incentive a safety system should create — and a judge will ask.
 
-Phase 1 computes these in Python over the seeded dataset. Phase 3 swaps in the plain
-parameterised SQL in `sql/aggregates.sql`, one statement per function, each readable aloud in
-two sentences. The response models do not change.
+When a database is configured, each function runs the matching named statement from
+`sql/aggregates.sql` — plain parameterised SQL, one statement per function, each readable aloud
+in two sentences. With no database it computes the same numbers in Python over the seeded stub.
+Same response models either way, so the frontend cannot tell.
+
+Member 4's hostile question is "what does the SQL actually compute, and why does it replace
+embeddings?" The answer: it counts reports per site, counts how many the current model called
+precursors, and divides. Embeddings would cluster reports by wording; this ranks locations by how
+often their reports carry fatal potential, which is the decision an HSE manager actually makes.
 """
 
 from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+import logging
 from statistics import median
 
+from . import db, repository
 from .schemas import (
     ActivityAggregate,
     ActivityAggregateResponse,
@@ -39,20 +47,43 @@ from .schemas import (
     SiteAggregateResponse,
     TrendPoint,
 )
-from .stub import MODEL_VERSION, REPORTS, ReportDetail
+from .stub import MODEL_VERSION, ReportDetail
+
+log = logging.getLogger(__name__)
 
 # Below this many reports, a group's rate is noise rather than signal.
 MIN_GROUP_N = 5
 
 
-def _scope() -> list[ReportDetail]:
-    """Rules 1 and 2: current model_version, synthetic only.
+def _params() -> dict:
+    return {"model_version": MODEL_VERSION, "min_group_n": MIN_GROUP_N}
 
-    In Phase 3 this becomes the `WHERE p.model_version = %(model_version)s AND r.source
-    <> 'osha'` clause plus the latest-prediction-per-report join.
+
+def _sql(name: str) -> list[dict] | None:
+    """Run a named statement, or return None when there is no database to run it against.
+
+    Any database error degrades to the Python path rather than 500ing: a dashboard showing
+    seeded data is recoverable mid-demo, a dashboard showing a stack trace is not.
+    """
+    if not db.is_live():
+        return None
+    try:
+        return db.query(db.statement(name), _params())
+    except Exception as exc:  # noqa: BLE001
+        log.error("aggregate %s failed in SQL, using Python path: %s", name, exc)
+        return None
+
+
+def _scope() -> list[ReportDetail]:
+    """Rules 1 and 2 in Python: current model_version, synthetic only.
+
+    Mirrors the `WHERE r.source <> 'osha' AND l.model_version = %(model_version)s` clause and
+    the latest-prediction-per-report join that the SQL path uses.
     """
     return [
-        r for r in REPORTS if r.source != "osha" and r.model_version == MODEL_VERSION
+        r
+        for r in repository.all_reports()
+        if r.source != "osha" and r.model_version == MODEL_VERSION
     ]
 
 
@@ -69,6 +100,9 @@ def _top_rule(rows: list[ReportDetail]) -> str:
 
 
 def summary() -> AggregateSummary:
+    if (sql := _sql("summary")) is not None:
+        return AggregateSummary(**sql[0])
+
     rows = _scope()
     total = len(rows)
     precursors = [r for r in rows if r.is_sif_precursor]
@@ -117,6 +151,14 @@ def _rank(items: list, ) -> list:
 
 
 def sites() -> SiteAggregateResponse:
+    if (sql := _sql("sites_ranked")) is not None:
+        small_sql = _sql("sites_insufficient_volume") or []
+        return SiteAggregateResponse(
+            ranked=[SiteAggregate(**r) for r in sql],
+            insufficient_volume=[SiteAggregate(**r) for r in small_sql],
+            min_group_n=MIN_GROUP_N,
+        )
+
     ranked, small = [], []
     for name, rows in _group(_scope(), "site"):
         precursors = [r for r in rows if r.is_sif_precursor]
@@ -136,6 +178,14 @@ def sites() -> SiteAggregateResponse:
 
 
 def activities() -> ActivityAggregateResponse:
+    if (sql := _sql("activities_ranked")) is not None:
+        small_sql = _sql("activities_insufficient_volume") or []
+        return ActivityAggregateResponse(
+            ranked=[ActivityAggregate(**r) for r in sql],
+            insufficient_volume=[ActivityAggregate(**r) for r in small_sql],
+            min_group_n=MIN_GROUP_N,
+        )
+
     ranked, small = [], []
     for name, rows in _group(_scope(), "activity"):
         precursors = [r for r in rows if r.is_sif_precursor]
@@ -156,6 +206,9 @@ def activities() -> ActivityAggregateResponse:
 
 def rules() -> list[RuleControlBucket]:
     """Counts by lsr_rule x control_status — the barrier-failure view on screen 3."""
+    if (sql := _sql("rules")) is not None:
+        return [RuleControlBucket(**r) for r in sql]
+
     tally: Counter[tuple[LSRRule, ControlStatus | None]] = Counter()
     for row in _scope():
         if row.lsr_rule:
@@ -168,6 +221,9 @@ def rules() -> list[RuleControlBucket]:
 
 def shifts() -> list[ShiftAggregate]:
     """Site x shift. This is what makes 'nine of them on night shift' a sentence."""
+    if (sql := _sql("shifts")) is not None:
+        return [ShiftAggregate(**r) for r in sql]
+
     buckets: dict[tuple[str, str], list[ReportDetail]] = {}
     for row in _scope():
         if row.site and row.shift:
@@ -190,6 +246,9 @@ def shifts() -> list[ShiftAggregate]:
 
 def trend() -> list[TrendPoint]:
     """Monthly buckets of report_date, ascending. A display, not a model — no forecasting."""
+    if (sql := _sql("trend")) is not None:
+        return [TrendPoint(**r) for r in sql]
+
     buckets: dict[str, list[ReportDetail]] = {}
     for row in _scope():
         buckets.setdefault(row.report_date.strftime("%Y-%m"), []).append(row)

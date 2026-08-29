@@ -243,3 +243,10 @@ pnpm-debug.log*
 # Editor
 .vscode/*
 !.vscode/extensions.json
+
+# Local classification cache
+cache.sqlite3
+*.sqlite3
+
+# Extracted plan text
+plan_tmp.txt
