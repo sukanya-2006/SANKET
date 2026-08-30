@@ -233,6 +233,7 @@ dist-ssr/
 # Env files (Node side)
 .env.local
 .env.*.local
+.env
 
 # Logs
 npm-debug.log*
@@ -250,3 +251,9 @@ cache.sqlite3
 
 # Extracted plan text
 plan_tmp.txt
+
+
+
+# Raw external datasets — large, publicly downloadable, don't commit
+January2015toNovember2025.csv
+*.zip
