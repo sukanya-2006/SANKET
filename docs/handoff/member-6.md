@@ -50,8 +50,19 @@ in git history is a bad look that no amount of good architecture recovers from.
 
 ## 3. Tests
 
-`backend/tests/test_api.py` has **34 passing tests, no skips**. They cover the ten named in
-[TECH_STACK v2](../TECH_STACK.md) §Testing:
+`backend/tests/test_api.py` has **36 passing tests, no skips**. They cover the ten named in
+[TECH_STACK v2](../TECH_STACK.md) §Testing, and they are **hermetic** — the conftest fixture pins
+the classifier registry, so a result no longer depends on whether `groq` is installed or a key is
+set. That was a real defect: the suite passed locally and failed on a clean clone.
+
+Verify the way a stranger would, which is the only check that counts:
+
+```bash
+git clone https://github.com/sukanya-2006/SIH-2026.git && cd SIH-2026
+python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
+cd backend && ../.venv/Scripts/python.exe -m pytest -q
+```
+
 
 ```bash
 cd backend && ./.venv/Scripts/python.exe -m pytest -q
@@ -66,7 +77,7 @@ The resilience tests register deliberately broken classifiers and drive the real
 nothing is faked. One of them caught a genuine bug: a timeout that fired but still blocked for
 the full duration of the slow call.
 
-**The pitch may claim a test suite only because it exists.** It does. You can say "thirty-four
+**The pitch may claim a test suite only because it exists.** It does. You can say "thirty-six
 tests" and open the file.
 
 No CI — invisible on stage relative to setup cost.

@@ -92,14 +92,38 @@ app.include_router(router)
 # develop against, the test suite needs to import this module, and a deployment that cannot
 # start has no degraded mode at all. /health reports which classifier actually got registered,
 # so a stub answering in production is visible rather than silent.
+log = logging.getLogger(__name__)
+
 try:
     from . import classifier_llm
 
     classifier.register_primary(classifier_llm.classify)
 except Exception as exc:  # noqa: BLE001
-    logging.getLogger(__name__).warning(
+    log.warning(
         "real classifier unavailable (%s: %s) — running on the baseline. "
         "Check GROQ_API_KEY and `pip install -r requirements.txt`.",
+        type(exc).__name__,
+        exc,
+    )
+
+# The baseline is what answers when the primary fails, times out, or returns output the schema
+# rejects twice. It needs baseline_model.joblib, which only exists after train_baseline.py runs
+# against a completed gold_labels.csv — so before labelling finishes this legitimately cannot
+# load, and the stub holds the slot instead.
+#
+# Registered defensively for the same reason as the primary, and so it wires itself in the
+# moment the model file appears rather than needing a code change nobody remembers to make on
+# demo day. Until then the degraded path answers with the keyword stub, which is weaker than the
+# TF-IDF baseline the pitch describes — /health names the slot honestly so that gap stays
+# visible rather than being discovered on stage.
+try:
+    from . import classifier_base
+
+    classifier.register_baseline(classifier_base.classify)
+except Exception as exc:  # noqa: BLE001
+    log.warning(
+        "TF-IDF baseline unavailable (%s: %s) — the fallback path will answer with the "
+        "keyword stub. Run train_baseline.py once data/gold_labels.csv exists.",
         type(exc).__name__,
         exc,
     )
