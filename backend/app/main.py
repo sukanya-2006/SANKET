@@ -47,7 +47,9 @@
 #         "prompt_version": settings.prompt_version,
 #     }
 
+import logging
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
@@ -55,7 +57,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import classifier, db, classifier_llm
+from . import classifier, db
 from .api.routes import router
 from .config import get_settings
 
@@ -82,10 +84,25 @@ app.add_middleware(
 
 app.include_router(router)
 
-# This line is the one that was missing — it actually plugs classifier_llm
-# into the primary slot. Without this, classifier.py still uses the stub
-# no matter how many times classifier_llm is imported.
-classifier.register_primary(classifier_llm.classify)
+# Plug the real classifier into the primary slot. Without this, classifier.py keeps using
+# the stub no matter how many times classifier_llm is imported.
+#
+# Defensive on purpose. If the groq package is missing or GROQ_API_KEY is unset, the API must
+# still start on the baseline rather than refusing to boot: the frontend needs a running API to
+# develop against, the test suite needs to import this module, and a deployment that cannot
+# start has no degraded mode at all. /health reports which classifier actually got registered,
+# so a stub answering in production is visible rather than silent.
+try:
+    from . import classifier_llm
+
+    classifier.register_primary(classifier_llm.classify)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "real classifier unavailable (%s: %s) — running on the baseline. "
+        "Check GROQ_API_KEY and `pip install -r requirements.txt`.",
+        type(exc).__name__,
+        exc,
+    )
 
 
 @app.get("/health", tags=["meta"])

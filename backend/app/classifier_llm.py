@@ -23,7 +23,17 @@ from groq import Groq
 
 MODEL_NAME = "openai/gpt-oss-20b"  # same free-tier model already in use elsewhere
 
-client = Groq()  # reads GROQ_API_KEY from environment
+# Built on first use, not at import. Constructing this at import time meant a missing
+# GROQ_API_KEY took down the entire API — no /health, no /reports, no dashboard — which is
+# the opposite of the degraded mode this classifier is supposed to sit behind.
+_client = None
+
+
+def _get_client() -> Groq:
+    global _client
+    if _client is None:
+        _client = Groq()  # reads GROQ_API_KEY from environment
+    return _client
 
 # ---------------------------------------------------------------------------
 # Rubric v2.1, condensed into a system prompt. This is not the full document -
@@ -148,7 +158,7 @@ def classify(report_text: str) -> dict:
     should raise on any hard failure (network error, bad JSON) rather than try
     to patch things up - that's what the fallback pipeline is for.
     """
-    response = client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model=MODEL_NAME,
         max_tokens=3000,  # generous headroom - gpt-oss-20b spends tokens on internal
                           # reasoning before the visible answer; too low silently
