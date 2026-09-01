@@ -1,12 +1,22 @@
 # Hand-off — Member 2 (ML)
 
-You own both classifiers, the prompt, and the `ClassificationResult` schema. Everything that
-consumes your work already exists and is under test, so you can build in isolation and plug in
-when ready.
+You own both classifiers, the prompt, and the `ClassificationResult` schema.
 
-**Build the baseline first, and score it before you write the LLM classifier.** The gap between
-them is the strongest thing in the pitch, and it only exists if the baseline is a real attempt
-rather than a strawman built afterwards.
+**Status: both classifiers are written. Neither is finished.**
+
+- `classifier_llm.py` — Groq (`openai/gpt-oss-20b`), prompted with rubric v2.1, **registered and
+  answering**. Needs `GROQ_API_KEY`.
+- `classifier_base.py` — TF-IDF + logistic regression, written but **untrained**. It needs
+  `app/baseline_model.joblib`, which `train_baseline.py` produces once `data/gold_labels.csv`
+  exists. Until then the fallback path answers with the keyword stub, which is weaker than the
+  baseline the pitch describes.
+
+Registration is already wired defensively in `main.py` for both slots — the baseline plugs itself
+in the moment the model file appears, so there is no code change to remember on demo day.
+
+**What is left for you:** train the baseline the hour labels land, then tune the prompt on the
+~30-report dev split. Score the baseline *before* comparing — the baseline-vs-LLM gap is only
+evidence if the baseline was a real attempt rather than a strawman built afterwards.
 
 ---
 
@@ -14,13 +24,13 @@ rather than a strawman built afterwards.
 
 - `ClassificationResult` is defined in [backend/app/schemas.py](../../backend/app/schemas.py),
   matching master plan §5 and [NAMES.md](../../NAMES.md).
-- The whole pipeline around you — cache, 10-second timeout, retry-once-on-schema-failure,
+- The whole pipeline around you — cache, wall-clock timeout, retry-once-on-schema-failure,
   fallback to baseline, `is_fallback` propagation, schema-failure-rate metric — is built and
   tested in [backend/app/classifier.py](../../backend/app/classifier.py).
-- Nine tests already exercise that machinery with deliberately broken classifiers. Run
-  `pytest -q` in `backend/` and you will see them pass before you write anything.
+- Ten tests exercise that machinery with deliberately broken classifiers: malformed output,
+  connection failure, timeout, both-classifiers-down, cache hit, missing API key.
 
-**You do not edit `classifier.py`.** You write two functions and register them.
+**You do not edit `classifier.py`.** You write two functions; registration is already wired.
 
 ---
 
@@ -38,30 +48,17 @@ where the schema-failure rate comes from; if you validate inside your own functi
 the error, the metric silently becomes zero and we lose the answer to "what happens when it
 hallucinates".
 
-Register at import time, in `backend/app/main.py` after the app is created:
-
-```python
-from . import classifier
-from .classifier_base import baseline
-from .classifier_llm import llm
-
-classifier.register_baseline(baseline)
-classifier.register_primary(llm)
-```
-
-Until you do, both slots hold the keyword stub and the API works — that is why the frontend could
-start on day 3.
+Registration already happens in `backend/app/main.py`, wrapped in try/except for both slots. If
+your module fails to import — missing package, missing key, missing model file — the API starts
+on whatever is available and logs the reason, rather than refusing to boot. **Do not remove that
+guard**: a deployment that cannot start has no degraded mode at all, and the frontend needs a
+running API regardless of your key.
 
 ---
 
-## Files to create
+## The two classifiers
 
-```
-backend/app/classifier_base.py    TF-IDF + logistic regression, ~30 lines
-backend/app/classifier_llm.py     one structured Claude call
-```
-
-### Baseline
+### Baseline — `backend/app/classifier_base.py` (written, untrained)
 
 scikit-learn, TF-IDF → logistic regression. Its own train/test split, stated explicitly.
 Explainability is the top-weighted words:
@@ -70,15 +67,18 @@ Explainability is the top-weighted words:
 sorted(zip(vec.get_feature_names_out(), model.coef_[0]))
 ```
 
-No SHAP. The baseline predicts `is_sif_precursor` and a `severity`; fill `hazard_assessment`,
-`lsr_rule` and `control_status` as best it can and set `reasoning` to something honest like
-`"keyword baseline: top features were ..."`. It is allowed to be worse — that is the point of it.
+No SHAP. The baseline predicts `is_sif_precursor` with real ML and fills the other schema fields
+with coarse, honest heuristics. It is allowed to be worse — that is the point of it.
 
-### LLM classifier
+**It needs `app/baseline_model.joblib`.** Run `python train_baseline.py` from the project root the
+hour `data/gold_labels.csv` lands. Until then the module raises on import, the guard catches it,
+and the fallback path answers with the keyword stub — which is weaker than the baseline the pitch
+describes, so this is worth doing immediately rather than on day 12.
 
-One structured call per report returning the full locked schema. Add `anthropic` to
-`backend/requirements.txt`. Read the `claude-api` skill reference before writing it rather than
-working from memory — model IDs and structured-output parameters change.
+### Real classifier — `backend/app/classifier_llm.py` (written, live)
+
+Groq, `openai/gpt-oss-20b`, prompted with rubric v2.1, registered in the primary slot. Needs
+`GROQ_API_KEY`. The client is built lazily, so a missing key degrades rather than killing the app.
 
 Points that will be attacked, so get them right:
 
@@ -93,6 +93,9 @@ Points that will be attacked, so get them right:
   a false positive and the ambiguous demo case stops working.
 - **Bump `PROMPT_VERSION` in `.env` whenever the prompt changes.** It is part of the cache key,
   so forgetting means an eval quietly mixes answers from two prompts.
+- **The timeout is currently 25s**, raised from 10 to reduce false fallbacks under batch load.
+  That is a long silence on stage, and the demo plans to *show* the fallback. Worth revisiting —
+  or splitting: a long timeout for `batch_classify.py`, a short one for the live box.
 
 Tune on the ~30-report dev split only. The held-out set opens exactly once, at the end.
 
@@ -102,13 +105,15 @@ Tune on the ~30-report dev split only. The held-out set opens exactly once, at t
 
 ```bash
 cd backend
-./.venv/Scripts/python.exe -m pytest -q          # still 34+ passing
-./.venv/Scripts/python.exe -m uvicorn app.main:app --reload
-curl localhost:8000/health                        # primary_classifier is yours, not stub-0.1.0
+../.venv/Scripts/python.exe -m pytest -q          # still 36 passing
+../.venv/Scripts/python.exe -m uvicorn app.main:app --reload
+curl localhost:8000/health
 ```
 
-Then `/meta` shows a real `schema_failure_rate`, and killing your network mid-request should
-return `is_fallback: true` rather than an error.
+`/health` should name **both** slots as yours — `primary_classifier` the Groq version and
+`baseline_classifier` the TF-IDF one, neither showing `stub-0.1.0`. Then `/meta` shows a real
+`schema_failure_rate`, and killing your network mid-request returns `is_fallback: true` rather
+than an error.
 
 ---
 

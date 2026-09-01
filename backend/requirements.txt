@@ -7,7 +7,10 @@ python-dotenv==1.0.1
 # Supabase is Postgres; we run the plain SQL in app/sql/ directly.
 psycopg[binary]==3.2.3
 
-# Member 2 adds anthropic + scikit-learn when the classifiers land.
+# Classifiers.
+groq==0.13.0
+scikit-learn==1.6.0
+pandas==2.2.3
 
 httpx==0.27.2
 pytest==8.3.4

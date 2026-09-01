@@ -1,9 +1,13 @@
 # Backend — SIF Precursor Detection API
 
-**Phase 1 status: stub.** Every endpoint returns the locked schema ([NAMES.md](../NAMES.md))
-backed by deterministic fake data, so Member 5 can build all three screens before any model
-exists. Phase 3 swaps the producers — Member 2's TF-IDF baseline and Claude classifier, and
-Supabase behind the aggregates. **Paths and field names do not change.**
+**Status: the real classifier is wired; the database is not.** `/analyze` goes through the Groq
+classifier prompted with rubric v2.1. Reads still come from the seeded stub until
+`SUPABASE_DB_URL` is set — the response shapes are identical either way, which is why the
+frontend could be built before any of this existed.
+
+The TF-IDF baseline is written but untrained (it needs `gold_labels.csv`), so the fallback path
+currently answers with the keyword stub. It registers itself automatically the moment
+`train_baseline.py` produces `app/baseline_model.joblib`.
 
 Authoritative specs: [docs/TECH_STACK.md](../docs/TECH_STACK.md) (v2, wins any disagreement),
 [NAMES.md](../NAMES.md), [docs/rubric.md](../docs/rubric.md).
@@ -125,7 +129,11 @@ backend/app/
   db.py               Supabase client; returns None when unconfigured
   sql/schema.sql      Supabase tables, constraints, RLS, fixed site list
   sql/aggregates.sql  Phase 3 SQL, one statement per aggregate
-backend/tests/        the ten tests named in TECH_STACK v2
+    classifier.py       the classify() boundary: cache, timeout, retry, fallback
+    classifier_llm.py   the real classifier — one structured Groq call
+    classifier_base.py  TF-IDF baseline; auto-registers once trained
+backend/tests/        36 tests, hermetic — they pin the classifier registry so results do
+                      not depend on whether groq is installed or a key is set
 ```
 
 ## Database

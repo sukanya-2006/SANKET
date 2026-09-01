@@ -319,8 +319,10 @@ EHS or industrial-engineering contact outside the team. Record the reviewer's na
 1. **Independence.** Members 1 and 3 label all 180 reports — 150 synthetic, 30 OSHA — with no
    contact until both finish. Member 3 generated the synthetic reports without seeing this rubric;
    Member 1 wrote this rubric without seeing the reports.
-2. **Batched, for an early signal.** First 90 by day 4, remainder by day 6. The day-4 batch exists
-   so a broken gate surfaces while there is still time to fix it.
+2. **Batched, for an early signal.** First 90 by **day 3 (Thu 3 Sep)**, remainder by **day 5
+   (Sat 5 Sep)** — pulled forward from the plan's day 4/6 because the build deadline is 20 Sep,
+   two days tighter than the plan assumed. The early batch exists so a broken gate surfaces while
+   there is still time to fix it. See [schedule.md](schedule.md).
 3. **Tiebreak.** Member 6 adjudicates every disagreement and records **which gate split** — not
    just the final label. That column is the whole diagnostic.
 4. **Agreement.** Member 3 computes raw agreement and Cohen's kappa (`cohen_kappa_score`).
