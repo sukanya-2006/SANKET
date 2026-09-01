@@ -124,19 +124,37 @@ def load_dataset():
 # and re-running cannot quietly reshuffle it into a friendlier partition.
 
 
-def get_split(synthetic_ids):
+def canonical_synthetic_ids():
+    """Every synthetic report id, from the source file.
+
+    The split is a property of the DATASET, not of labelling progress. Building it from
+    gold_labels.csv instead would make it move: reports held back for tiebreak are absent
+    from the gold file, so the partition would change every time an adjudication landed —
+    and a held-out set that moves is not a held-out set.
+    """
+    return [str(r["report_id"]).strip() for r in read_csv(SYNTHETIC)]
+
+
+def get_split():
+    ids_now = set(canonical_synthetic_ids())
+
     if SPLIT_FILE.exists():
         split = json.loads(SPLIT_FILE.read_text(encoding="utf-8"))
         known = set(split["dev"]) | set(split["held_out"])
-        if set(synthetic_ids) != known:
+        if ids_now != known:
+            missing, extra = known - ids_now, ids_now - known
             raise SystemExit(
-                f"\n[!] {SPLIT_FILE.name} was made for a different set of report ids.\n"
-                "    Delete it to regenerate - but be aware that reshuffling the split\n"
-                "    after seeing results is how a held-out set stops meaning anything.\n"
+                f"\n[!] {SPLIT_FILE.name} does not match the synthetic report set.\n"
+                f"    {len(missing)} id(s) in the split are no longer in the dataset;\n"
+                f"    {len(extra)} new id(s) are not in the split.\n"
+                "    That means the reports themselves changed, which is a real problem —\n"
+                "    it is not caused by labelling progress or tiebreaks.\n"
+                "    Delete it to regenerate, but reshuffling after seeing results is how a\n"
+                "    held-out set stops meaning anything.\n"
             )
         return split
 
-    ids = sorted(synthetic_ids, key=int)
+    ids = sorted(ids_now, key=int)
     random.Random(SEED).shuffle(ids)
     split = {
         "seed": SEED,
@@ -355,12 +373,21 @@ def main():
                 print("\n  [!] Below 70%. Rubric section 10: revise the splitting gate and")
                 print("      re-label only the reports that turned on it.")
 
-    split = get_split([r["report_id"] for r in synthetic]) if synthetic else None
+    split = get_split() if synthetic else None
     if split:
         chosen = "held_out" if args.open_held_out else "dev"
         keep = set(split[chosen])
         test = [r for r in synthetic if r["report_id"] in keep]
         label = "HELD-OUT" if args.open_held_out else "DEV (tuning split)"
+
+        # Reports still awaiting tiebreak have no gold label yet, so they simply are not
+        # scored. Say how many, rather than quietly reporting a metric over a smaller set
+        # than the reader assumes.
+        unlabelled = len(keep) - len(test)
+        if unlabelled:
+            print(f"\n  [!] {unlabelled} of the {len(keep)} {chosen} reports have no gold label")
+            print("      yet (awaiting tiebreak). Scoring the remainder.")
+
         if not args.open_held_out:
             print("\n  Scoring the DEV split. The held-out set stays closed until the final")
             print("  run — pass --open-held-out then, once.")
