@@ -3,7 +3,7 @@ run_eval.py — the evaluation table. Artifact #1 of the three that matter most.
 
     python eval/run_eval.py
     python eval/run_eval.py --no-llm          # baseline only, no API calls
-    python eval/run_eval.py --open-held-out   # the one run that counts
+    python eval/run_eval.py --folds 10        # more folds, tighter estimate
 
 OWNERSHIP: Member 3 owns evaluation per the master plan. This was written by
 Member 1/4 while labelling was the bottleneck, so it would be ready the hour
@@ -16,9 +16,16 @@ WHAT THIS PRINTS, AND WHY IT IS SHAPED THIS WAY
 
 Two tables and one line. Never a single merged table.
 
-  Table 1  Synthetic held-out split: baseline vs LLM.
-           The fair, apples-to-apples fight. Both models trained/tuned on the
-           same population they are tested on.
+  Table 1  Synthetic: baseline vs LLM, 5-fold cross-validation.
+           The fair, apples-to-apples fight. Every report in the pool is scored
+           exactly once, as a member of the one fold its model did not train on,
+           and the reported figure is the mean across folds with its spread.
+           A single split of this size would swing several F1 points on one
+           flipped prediction; averaging five folds does not.
+
+           The pool is the 120 held-out reports. The 30 dev reports are excluded
+           from scoring entirely, because the LLM prompt was tuned on them -
+           scoring them would be marking the model on its own worked examples.
 
   Table 2  OSHA set: LLM only.
            A generalisation check on real writing nobody on the team produced.
@@ -227,58 +234,86 @@ def agreement_ceiling(path_a, path_b):
 # ---------------------------------------------------------------------------
 
 
-BASELINE_SPLIT_RECORD = ROOT / "backend" / "app" / "baseline_train_ids.json"
+def cross_validate_baseline(rows, n_folds):
+    """Fit the baseline inside each fold. Never uses the shipped model.
 
-
-def warn_if_baseline_leaks(test_ids):
-    """The baseline must not be scored on reports it was trained on.
-
-    train_baseline.py currently makes its OWN train_test_split over all 180 reports,
-    with no knowledge of eval/split.json. So unless it is changed, roughly 80% of the
-    reports scored here were in its training set — which inflates the baseline and
-    therefore SHRINKS the baseline-vs-LLM gap, the team's stated strongest
-    differentiator. It is also the first thing an ML judge probes.
-
-    The fix belongs in train_baseline.py: read eval/split.json, train on `held_out`
-    minus whatever is being scored, and write the ids it actually trained on to
-    baseline_train_ids.json. Until that exists, say so loudly rather than quietly
-    reporting a contaminated number.
+    backend/app/baseline_model.joblib is trained on every label so the live fallback is
+    as strong as possible. Scoring that model here would be marking it on its own
+    training data. So the pipeline is refitted per fold instead, using the same builder
+    train_baseline.py ships, so the evaluated model and the shipped model cannot drift
+    apart in their hyperparameters.
     """
-    if not BASELINE_SPLIT_RECORD.exists():
-        print("  [!] LEAKAGE RISK — the baseline's training ids are unknown.")
-        print("      train_baseline.py splits independently of eval/split.json, so the")
-        print("      reports scored below were probably in its training set. That inflates")
-        print("      the baseline and understates the gap to the LLM.")
-        print("      Fix: have train_baseline.py read eval/split.json and record the ids it")
-        print("      trained on. Do not quote this row until then.\n")
-        return
-
-    trained = set(json.loads(BASELINE_SPLIT_RECORD.read_text(encoding="utf-8")))
-    overlap = trained & set(test_ids)
-    if overlap:
-        print(f"  [!] LEAKAGE — {len(overlap)}/{len(test_ids)} scored reports were in the")
-        print("      baseline's training set. This row is not a fair comparison.\n")
-    else:
-        print("  Baseline train/test separation verified against eval/split.json.\n")
-
-
-def predict_baseline(rows):
-    warn_if_baseline_leaks([r["report_id"] for r in rows])
     try:
-        from app import classifier_base
+        import numpy as np
+        from sklearn.model_selection import StratifiedKFold
+
+        sys.path.insert(0, str(ROOT))
+        from train_baseline import build_pipeline
     except Exception as exc:  # noqa: BLE001
-        print(f"  [!] Baseline unavailable ({type(exc).__name__}): {exc}")
-        print("      Run `python train_baseline.py` first.\n")
+        print(f"  [!] Baseline unavailable ({type(exc).__name__}): {exc}\n")
         return None
 
-    preds, scores, severities = [], [], []
-    for row in rows:
-        result = classifier_base.classify(row["text"])
-        result = result if isinstance(result, dict) else result.model_dump()
-        preds.append(bool(result["is_sif_precursor"]))
-        scores.append(float(result.get("confidence", 0.5)))
-        severities.append(int(result["severity"]))
-    return preds, scores, severities
+    X = np.array([r["text"] for r in rows])
+    y = np.array([r["is_sif_precursor"] for r in rows])
+
+    if len(set(y)) < 2:
+        print("  [!] Only one class present; cross-validation is meaningless here.\n")
+        return None
+
+    folds = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=SEED)
+    scores = []
+    for train_idx, test_idx in folds.split(X, y):
+        pipeline = build_pipeline()
+        pipeline.fit(X[train_idx], y[train_idx])
+        y_pred = pipeline.predict(X[test_idx])
+        y_score = pipeline.predict_proba(X[test_idx])[:, 1]
+        scores.append(metrics(list(y[test_idx]), list(y_pred), list(y_score)))
+    return scores
+
+
+def cross_validate_llm(rows, n_folds):
+    """Score the LLM over the same folds.
+
+    The LLM is not refitted - it has no training step - so its predictions are
+    fold-independent. Scoring it fold-wise anyway is what makes the two rows
+    comparable: both report a mean and a spread over the same partitions, rather
+    than one exact figure beside one averaged one.
+    """
+    import numpy as np
+    from sklearn.model_selection import StratifiedKFold
+
+    predicted = predict_llm(rows)
+    if predicted is None:
+        return None, None
+    preds, confidences, severities = predicted
+
+    y = np.array([r["is_sif_precursor"] for r in rows])
+    preds, confidences = np.array(preds), np.array(confidences)
+
+    folds = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=SEED)
+    scores = [
+        metrics(list(y[idx]), list(preds[idx]), list(confidences[idx]))
+        for _, idx in folds.split(np.zeros(len(y)), y)
+    ]
+    return scores, severities
+
+
+def summarise(scores):
+    """Mean and standard deviation across folds."""
+    import statistics
+
+    def agg(key):
+        vals = [s[key] for s in scores if s[key] is not None]
+        if not vals:
+            return None, None
+        return statistics.mean(vals), (statistics.stdev(vals) if len(vals) > 1 else 0.0)
+
+    f1_m, f1_sd = agg("f1")
+    pr_m, pr_sd = agg("pr_auc")
+    p_m, _ = agg("precision")
+    r_m, _ = agg("recall")
+    return {"f1": f1_m, "f1_sd": f1_sd, "pr_auc": pr_m, "pr_auc_sd": pr_sd,
+            "precision": p_m, "recall": r_m, "n": sum(s["n"] for s in scores)}
 
 
 def predict_llm(rows):
@@ -317,6 +352,22 @@ def predict_llm(rows):
 # ---------------------------------------------------------------------------
 
 
+def cv_row(name, agg):
+    if agg is None:
+        return f"  {name:<20} {'unavailable':>50}"
+    f1 = f"{agg['f1']:.3f} ± {agg['f1_sd']:.3f}"
+    pr = f"{agg['pr_auc']:.3f} ± {agg['pr_auc_sd']:.3f}" if agg["pr_auc"] is not None else "-"
+    return (f"  {name:<20} {f1:>15} {pr:>17} "
+            f"{agg['precision']:>10.3f} {agg['recall']:>8.3f} {agg['n']:>6}")
+
+
+def cv_header(title):
+    print(f"\n{title}")
+    print("  " + "-" * 76)
+    print(f"  {'':<20} {'F1 (mean ± sd)':>15} {'PR-AUC (mean ± sd)':>17} "
+          f"{'prec':>10} {'recall':>8} {'n':>6}")
+
+
 def row_line(name, m):
     if m is None:
         return f"  {name:<22} {'unavailable':>52}"
@@ -335,8 +386,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--no-llm", action="store_true", help="baseline only, no API calls")
-    parser.add_argument("--open-held-out", action="store_true",
-                        help="score the held-out split. Do this ONCE, at the end")
+    parser.add_argument("--folds", type=int, default=5,
+                        help="cross-validation folds over the scoring pool (default 5)")
     parser.add_argument("--annotators", nargs=2, metavar=("A", "B"),
                         help="the two annotator CSVs, for the agreement ceiling")
     args = parser.parse_args()
@@ -374,49 +425,49 @@ def main():
                 print("      re-label only the reports that turned on it.")
 
     split = get_split() if synthetic else None
+    test = []
     if split:
-        chosen = "held_out" if args.open_held_out else "dev"
-        keep = set(split[chosen])
-        test = [r for r in synthetic if r["report_id"] in keep]
-        label = "HELD-OUT" if args.open_held_out else "DEV (tuning split)"
+        pool = set(split["held_out"])
+        test = [r for r in synthetic if r["report_id"] in pool]
 
-        # Reports still awaiting tiebreak have no gold label yet, so they simply are not
-        # scored. Say how many, rather than quietly reporting a metric over a smaller set
-        # than the reader assumes.
-        unlabelled = len(keep) - len(test)
-        if unlabelled:
-            print(f"\n  [!] {unlabelled} of the {len(keep)} {chosen} reports have no gold label")
-            print("      yet (awaiting tiebreak). Scoring the remainder.")
+        # Reports still awaiting tiebreak have no gold label yet, so they are not scored.
+        # Say how many, rather than quietly reporting a metric over a smaller set than
+        # the reader assumes.
+        missing = len(pool) - len(test)
+        if missing:
+            print(f"\n  [!] {missing} of the {len(pool)} scoring-pool reports have no gold")
+            print("      label yet (awaiting tiebreak). Scoring the remainder.")
+        print(f"\n  Scoring pool: {len(test)} reports. The {len(split['dev'])} dev reports are")
+        print("  excluded — the LLM prompt was tuned on them.")
 
-        if not args.open_held_out:
-            print("\n  Scoring the DEV split. The held-out set stays closed until the final")
-            print("  run — pass --open-held-out then, once.")
-    else:
-        test, label = [], "none"
-
-    # --- Table 1: synthetic, baseline vs LLM ---
+    # --- Table 1: synthetic, baseline vs LLM, cross-validated ---
     if test:
-        y_true = [r["is_sif_precursor"] for r in test]
-        gold_sev = [r["severity"] for r in test]
+        if len(test) < args.folds * 2:
+            print(f"\n  [!] Only {len(test)} reports; {args.folds} folds is too many. Skipping.")
+        else:
+            cv_header(f"  TABLE 1 — Synthetic, {args.folds}-fold CV  (the fair fight)")
 
-        header(f"  TABLE 1 — Synthetic {label} split  (the fair fight)")
-        base = predict_baseline(test)
-        if base:
-            print(row_line("TF-IDF baseline", metrics(y_true, base[0], base[1])))
+            base_scores = cross_validate_baseline(test, args.folds)
+            if base_scores:
+                print(cv_row("TF-IDF baseline", summarise(base_scores)))
 
-        llm = None if args.no_llm else predict_llm(test)
-        if llm:
-            print(row_line("LLM classifier", metrics(y_true, llm[0], llm[1])))
+            if not args.no_llm:
+                llm_scores, severities = cross_validate_llm(test, args.folds)
+                if llm_scores:
+                    print(cv_row("LLM classifier", summarise(llm_scores)))
 
-            pairs = [(g, p) for g, p, t in zip(gold_sev, llm[2], y_true) if t]
-            mae = severity_mae(pairs)
-            if mae is not None:
-                print(f"\n  Severity MAE (LLM, precursor cases only): {mae:.2f}  "
-                      f"on {len(pairs)} reports")
+                    y_true = [r["is_sif_precursor"] for r in test]
+                    gold_sev = [r["severity"] for r in test]
+                    pairs = [(g, p) for g, p, t in zip(gold_sev, severities, y_true) if t]
+                    mae = severity_mae(pairs)
+                    if mae is not None:
+                        print(f"\n  Severity MAE (LLM, precursor cases only): {mae:.2f}  "
+                              f"on {len(pairs)} reports")
 
     # --- Table 2: OSHA, LLM only ---
     if osha and not args.no_llm:
-        header("  TABLE 2 — OSHA set, LLM only  (generalisation check)")
+        print("\n  TABLE 2 — OSHA set, LLM only  (generalisation check)")
+        print("  " + "-" * 76)
         print("  Real writing nobody on the team produced. The baseline is trained on")
         print("  synthetic reports, so scoring it here would measure domain transfer")
         print("  rather than model quality — an unfair fight we do not stage.")
@@ -424,7 +475,10 @@ def main():
         llm_osha = predict_llm(osha)
         if llm_osha:
             y_true = [r["is_sif_precursor"] for r in osha]
-            print(row_line("LLM classifier", metrics(y_true, llm_osha[0], llm_osha[1])))
+            m = metrics(y_true, llm_osha[0], llm_osha[1])
+            pr = f"{m['pr_auc']:.3f}" if m["pr_auc"] is not None else "-"
+            print(f"  {'LLM classifier':<20} F1 {m['f1']:.3f}   PR-AUC {pr}   "
+                  f"prec {m['precision']:.3f}   recall {m['recall']:.3f}   n {m['n']}")
 
     print("\n" + "=" * 72)
     print("  Accuracy is deliberately absent. At ~22% positives, answering 'no' to")
