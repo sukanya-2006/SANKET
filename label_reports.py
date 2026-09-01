@@ -8,6 +8,7 @@ costs more than the row you were on.
     python label_reports.py --annotator vishnu
     python label_reports.py --annotator vishnu --stats
     python label_reports.py --annotator vishnu --review 47
+    python label_reports.py --annotator vishnu --validate
 
 WHAT THIS TOOL DOES NOT DO: it never suggests, predicts, or hints at a label.
 Not once. Two annotators labelling independently is the only reason Cohen's
@@ -236,6 +237,83 @@ def label_one(row):
     }
 
 
+def validate(rows, path):
+    """Check a hand-edited CSV against rubric v2.1 before it reaches merge_labels.py.
+
+    Worth running even if you labelled in Excel rather than with this tool. An invalid value
+    does not error anywhere downstream - merge_labels.py just reads it as a disagreement with
+    the other annotator, so a typo quietly lowers the kappa you are about to quote on stage.
+    """
+    problems = []
+
+    for i, row in enumerate(rows, start=2):  # start=2: row 1 is the header, matches Excel
+        if not is_labelled(row):
+            continue
+
+        rid = row.get("report_id", "?")
+        hazard = (row.get("hazard_assessment") or "").strip()
+        lsr = (row.get("lsr_rule") or "").strip()
+        control = (row.get("control_status") or "").strip()
+        sev = (row.get("severity") or "").strip()
+        precursor = (row.get("is_sif_precursor") or "").strip().upper()
+        notes = (row.get("notes") or "").strip()
+
+        def bad(msg):
+            problems.append(f"  line {i:>4} (report {rid}): {msg}")
+
+        if hazard not in HAZARD.values():
+            bad(f"hazard_assessment {hazard!r} - must be one of {sorted(HAZARD.values())}")
+            continue
+
+        if hazard == "yes":
+            if lsr not in LSR_RULES:
+                bad(f"lsr_rule {lsr!r} - must be one of the eight rules")
+            if control not in CONTROL.values():
+                bad(f"control_status {control!r} - required when hazard is yes")
+        else:
+            if lsr != "none":
+                bad(f"lsr_rule {lsr!r} - must be 'none' when hazard is {hazard}")
+            if control:
+                bad(f"control_status {control!r} - must be blank when hazard is {hazard}")
+
+        if sev not in {"1", "2", "3", "4", "5"}:
+            bad(f"severity {sev!r} - must be 1-5")
+            continue
+
+        if precursor not in {"TRUE", "FALSE"}:
+            bad(f"is_sif_precursor {precursor!r} - must be TRUE or FALSE")
+        else:
+            expected = "TRUE" if derive_precursor(hazard, control, sev) else "FALSE"
+            if precursor != expected:
+                bad(
+                    f"is_sif_precursor is {precursor} but rubric section 6 gives {expected} "
+                    f"(hazard={hazard}, control={control or '-'}, severity={sev}). "
+                    "This field is derived, never judged."
+                )
+
+        # Rubric section 2: notes are mandatory for these two, because they are what tells
+        # Member 6 which gate split when adjudicating.
+        if hazard == "insufficient_information" and not notes:
+            bad("notes are mandatory for insufficient_information (rubric section 2)")
+        if control == "unclear" and not notes:
+            bad("notes are mandatory for control_status=unclear (rubric section 2)")
+
+    labelled = sum(1 for r in rows if is_labelled(r))
+    print(f"\n  Checked {labelled} labelled rows in {path}.")
+    if not problems:
+        print("  No problems found.\n")
+        return True
+
+    print(f"  {len(problems)} problem(s):\n")
+    for line in problems[:60]:
+        print(line)
+    if len(problems) > 60:
+        print(f"  ... and {len(problems) - 60} more")
+    print("\n  Fix these before running merge_labels.py. An invalid value is not an error")
+    print("  downstream - it is silently read as a disagreement, which lowers the kappa.\n")
+    return False
+
+
 def print_stats(rows):
     total = len(rows)
     done = [r for r in rows if is_labelled(r)]
@@ -274,6 +352,9 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--annotator", required=True, help="your name, matching the CSV filename")
     parser.add_argument("--stats", action="store_true", help="show progress and stop")
+    parser.add_argument("--validate", action="store_true",
+                        help="check the CSV against rubric v2.1 and stop "
+                             "(run this if you labelled in Excel)")
     parser.add_argument("--review", type=int, metavar="N",
                         help="re-label report at position N (1-based), overwriting it")
     args = parser.parse_args()
@@ -284,6 +365,9 @@ def main():
     for col in JUDGMENT_COLUMNS:
         if col not in fieldnames:
             raise SystemExit(f"{path} has no '{col}' column - regenerate the template.")
+
+    if args.validate:
+        sys.exit(0 if validate(rows, path) else 1)
 
     if args.stats:
         print_stats(rows)

@@ -57,7 +57,7 @@ pytest locally, ~10 real tests: /analyze contract, 422 on malformed/empty input,
 - Sourced from the PS's own citations (DEKRA Martin & Black 2015, EEI SIF model, VelocityEHS 2024) + IOGP Report 459. 15-minute external EHS review before finalising; record reviewer name.
 - Rubric-writer (M1) and report-writer (M3) work with no cross-contact until both finish.
 - **Dataset: 150 synthetic** (not 90 — at ~22% positives, 90 leaves ~6 test positives and F1 swings ~8 points per flipped prediction) **+ 30 real OSHA narratives** (pulled by M6). Every synthetic report carries site/activity/shift/report_date/is_contractor across 8–10 fixed sites, distributed unevenly so the rate ranking has a clean winner. Positive class 20–25%; never rebalance.
-- Both annotators (M1, M3) label ALL 180 independently, batched (90 by day 4 for the early agreement signal, rest by day 6). M6 tiebreaks, recording which gate split. <70% agreement → revise only the offending gate, re-label only its reports.
+- Both annotators (M1, M3) label ALL 180 independently, batched (90 by **day 3**, rest by **day 5** — pulled forward from day 4/6 once 20 Sep was confirmed as the build deadline, leaving 20 days rather than the ~22 this was written for; see [schedule.md](schedule.md)). M6 tiebreaks, recording which gate split. <70% agreement → revise only the offending gate, re-label only its reports.
 
 ## Evaluation (two tables + one line — never the single merged table)
 1. **Synthetic held-out split:** baseline F1/PR-AUC vs LLM F1/PR-AUC — the fair fight. (~30 dev reports for prompt tuning; held-out opened exactly ONCE.)
@@ -95,4 +95,6 @@ sif-detector/
 Free tiers throughout; ~500 Claude calls across dev + demo. Budget ₹1,000 (₹500 is optimistic once prompt-tuning re-runs are counted). Still effectively free.
 
 ---
+*Changelog v2.1 (1 Sep): 20 September confirmed as the build deadline, not the submission-form date. Labelling batches pulled forward to day 3 / day 5. Everything else unchanged.*
+
 *Changelog v2: names re-locked (category/hazard_category/barrier_status purged again); dataset restored to 150; two-table evaluation restored; offline fallback restored; v1.1 aggregation (rates, activities, trend, summary, guard, recommended_check) merged; severity MAE and metadata columns confirmed.*

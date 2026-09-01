@@ -46,6 +46,29 @@ TOP_WORDS_OUTPUT_PATH = "backend/app/baseline_top_words.json"
 TOP_N_WORDS = 15
 
 
+def build_pipeline() -> Pipeline:
+    """The baseline, in one place.
+
+    eval/run_eval.py imports this so its cross-validation folds are fitted with exactly
+    these hyperparameters. If the two ever drift apart, the number we report stops
+    describing the model we ship, which is the kind of discrepancy nobody notices until a
+    judge asks why they disagree.
+    """
+    return Pipeline([
+        ("tfidf", TfidfVectorizer(
+            max_features=2000,
+            ngram_range=(1, 2),
+            stop_words="english",
+            min_df=2,
+        )),
+        ("clf", LogisticRegression(
+            class_weight="balanced",  # positives are ~20-25% of the data
+            max_iter=1000,
+            random_state=42,
+        )),
+    ])
+
+
 def load_and_join_data() -> pd.DataFrame:
     if not os.path.exists(GOLD_LABELS_PATH):
         sys.exit(
@@ -104,20 +127,7 @@ def main():
         X, y, test_size=0.2, stratify=y, random_state=42
     )
 
-    pipeline = Pipeline([
-        ("tfidf", TfidfVectorizer(
-            max_features=2000,
-            ngram_range=(1, 2),
-            stop_words="english",
-            min_df=2,
-        )),
-        ("clf", LogisticRegression(
-            class_weight="balanced",  # positives are ~20-25% of the data
-            max_iter=1000,
-            random_state=42,
-        )),
-    ])
-
+    pipeline = build_pipeline()
     pipeline.fit(X_train, y_train)
 
     # Report F1 and PR-AUC - never accuracy, per the tech stack doc's own
@@ -128,12 +138,19 @@ def main():
     f1 = f1_score(y_test, y_pred)
     pr_auc = average_precision_score(y_test, y_proba)
 
-    print(f"\nHeld-out test set ({len(X_test)} reports):")
+    print(f"\nSanity check only - single split, {len(X_test)} reports.")
+    print("Report eval/run_eval.py's cross-validated numbers in the pitch, not these.")
+    print(f"Held-out test set ({len(X_test)} reports):")
     print(f"  F1:      {f1:.3f}")
     print(f"  PR-AUC:  {pr_auc:.3f}")
 
-    # Retrain on the FULL dataset for the model that actually ships - the
-    # train/test split above was only to get an honest accuracy estimate.
+    # Retrain on the FULL dataset for the model that actually SHIPS. This model is the
+    # live fallback, so it should use every label available.
+    #
+    # It is therefore NOT the model the evaluation scores. eval/run_eval.py refits this
+    # pipeline inside its own cross-validation folds, because a model that has seen the
+    # reports it is being tested on tells you nothing. The single-split F1 printed above
+    # is a rough sanity check; the number that goes in the pitch comes from run_eval.
     pipeline.fit(X, y)
 
     os.makedirs(os.path.dirname(MODEL_OUTPUT_PATH), exist_ok=True)

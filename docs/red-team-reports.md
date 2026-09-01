@@ -8,7 +8,7 @@ the rubric's standing decisions, never a change to a gate.
 
 **Three of these findings were defects rather than contingencies, and were applied in rubric
 v2.1** — before labelling started, so no re-labelling was needed. They are marked below. The
-remaining twelve rulings stay in reserve: if the day-4 agreement check fails, these are the
+remaining twelve rulings stay in reserve: if the day-3 agreement check fails, these are the
 pre-written answers rather than a panicked rewrite.
 
 Each report is written to be genuinely ambiguous under the current wording. If you read one and
@@ -253,7 +253,7 @@ severity 5.
 ## Three findings that should change the rubric before labelling, not after
 
 > **APPLIED in rubric v2.1**, before labelling began — so no re-labelling was required. The other
-> twelve rulings stay in reserve for the day-4 agreement check.
+> twelve rulings stay in reserve for the day-3 agreement check.
 
 Most of the table is contingency. These three were defects:
 
