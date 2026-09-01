@@ -500,7 +500,41 @@ def test_api_runs_without_a_database():
     assert health["status"] == "ok"
     assert health["database"] == "not_configured"
     assert health["data_source"] == "seeded_stub"
+
+
+def test_health_names_whichever_classifier_is_actually_registered():
+    """/health must not flatter us.
+
+    Nobody should demo the keyword stub believing it is the real classifier, so this reports
+    what is registered right now rather than what we hoped would be. The conftest fixture pins
+    the stub, so that is what we expect here.
+    """
+    from app import classifier
+
+    health = client.get("/health").json()
+    assert health["primary_classifier"] == classifier.active_versions()["primary"]
+    assert health["baseline_classifier"] == classifier.active_versions()["baseline"]
     assert health["primary_classifier"] == "stub-0.1.0"
+
+
+def test_missing_api_key_degrades_instead_of_killing_the_app(swap_classifiers):
+    """A clean clone with no GROQ_API_KEY must still serve a usable answer.
+
+    This is the exact failure a teammate hits on first setup, and the exact failure a judge
+    would see if the key expired: the real classifier raises on every call, and the API has to
+    answer from the baseline with is_fallback true rather than returning an error.
+    """
+
+    def no_key(text):
+        raise RuntimeError("The api_key client option must be set")
+
+    no_key.version = "groq-test"
+    swap_classifiers(primary=no_key, baseline=_baseline_stub())
+
+    body = client.post("/analyze", json={"report_text": PRECURSOR_TEXT}).json()
+    assert body["is_fallback"] is True
+    assert body["result"]["is_sif_precursor"] is True
+    assert body["model_version"] == "tfidf-test"
 
 
 def test_meta_exposes_measured_model_health():
