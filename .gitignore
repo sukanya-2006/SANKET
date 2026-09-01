@@ -257,3 +257,8 @@ plan_tmp.txt
 # Raw external datasets — large, publicly downloadable, don't commit
 January2015toNovember2025.csv
 *.zip
+
+# Trained artefacts — rebuilt by train_baseline.py from real gold labels
+backend/app/baseline_model.joblib
+backend/app/baseline_top_words.json
+backend/app/baseline_train_ids.json
