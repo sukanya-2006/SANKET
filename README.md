@@ -18,6 +18,7 @@ It never closes a report. It reorders the reading queue.
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | **v2, authoritative.** If any other write-up disagrees, this wins |
 | [NAMES.md](NAMES.md) | Locked field names. Read before writing a line of code, SQL, or UI |
 | [docs/rubric.md](docs/rubric.md) | v2.1 — the three gates, how to apply them, the labelling protocol |
+| [docs/schedule.md](docs/schedule.md) | 20 days to 20 Sep — dated plan, checkpoints, slip triggers |
 | [docs/handoff/](docs/handoff/) | One page per member: what is waiting for you and how to plug it in |
 
 **The naming rule matters more than it looks.** Field names drifted across three drafts of the
@@ -170,8 +171,8 @@ render.yaml               Member 6 — API deployment
   strict column validation that would reject the `gold_labels.csv` that `merge_labels.py` writes.
 - **`requirements_groq.txt`** at the root is a leftover; `backend/requirements.txt` covers
   everything.
-- **Is 20 September the build deadline or the submission-form date?** The schedule assumes ~22
-  days with days 1–6 on labelling.
+- **~~Is 20 September the build deadline?~~** Answered: **yes, it is the build deadline.**
+  20 days from 1 Sep. See [docs/schedule.md](docs/schedule.md).
 
 ---
 
