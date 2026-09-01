@@ -88,6 +88,11 @@ labelling (M1 + M3, 0/180)  ──▶  merge_labels.py  ──▶  gold_labels.c
                                     (the pitch's core number)
 ```
 
+Label with `python label_reports.py --annotator <you>` — one report at a time, enums enforced,
+`is_sif_precursor` derived from the rubric's §6 decision table rather than eyeballed, notes
+required where the rubric demands them, and saved after every row so a crash costs one report.
+**It never suggests a label** — that is the whole reason the kappa means anything.
+
 Both annotators label all 180 **independently**, with no discussion of any case until both are
 completely finished. That independence is what makes Cohen's kappa mean anything, and it is the
 answer to the hardest question a judge will ask: *"you wrote the reports and graded yourself."*
@@ -109,6 +114,7 @@ docs/
   rehearsal.md            drills and per-member cheat sheets
 
 create_labeling_template.py   per-annotator worksheet generator
+label_reports.py              terminal labelling tool — one report at a time, resumable
 merge_labels.py               agreement %, Cohen's kappa, writes gold_labels.csv
 train_baseline.py             trains the TF-IDF baseline (needs gold_labels.csv)
 load_reports.py               loads reports into Supabase
