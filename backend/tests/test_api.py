@@ -11,7 +11,7 @@ app/classifier.py by registering deliberately broken classifiers; nothing here i
 import pytest
 from fastapi.testclient import TestClient
 
-from app import aggregate, repository
+from app import aggregate, classifier, repository
 from app.main import app
 from app.schemas import LSRRule
 
@@ -288,7 +288,7 @@ def fixture_reports(monkeypatch):
             confidence=0.8,
             created_at=created,
             classified_at=created + timedelta(seconds=4),
-            model_version=aggregate.MODEL_VERSION,
+            model_version=classifier.active_versions()["primary"],
             result=None,
         )
 
@@ -446,7 +446,7 @@ def test_positive_class_stays_in_the_20_to_25_percent_band():
     """Plan §6: never rebalance to 50/50 — it flatters every model."""
     summary = client.get("/aggregate/summary").json()
     assert 0.20 <= summary["precursor_rate"] <= 0.25
-    assert summary["model_version"] == aggregate.MODEL_VERSION
+    assert summary["model_version"] == classifier.active_versions()["primary"]
     assert summary["median_triage_seconds"] > 0
 
 
