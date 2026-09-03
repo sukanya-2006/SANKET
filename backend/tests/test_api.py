@@ -539,7 +539,7 @@ def test_missing_api_key_degrades_instead_of_killing_the_app(swap_classifiers):
 
 def test_meta_exposes_measured_model_health():
     body = client.get("/meta").json()
-    assert body["rubric_version"] == "2.1"
+    assert body["rubric_version"] == "2.2"
     assert set(body["lsr_rule"]) == {r.value for r in LSRRule}
     assert body["sites"] and body["activities"]
     assert "schema_failure_rate" in body["metrics"]

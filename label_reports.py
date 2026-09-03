@@ -30,7 +30,7 @@ What it DOES do, beyond saving you from Excel:
   * Refuses to move on without notes where the rubric makes them mandatory.
   * Resumes exactly where you stopped.
 
-Rubric v2.1 lives in docs/rubric.md. Keep it open. Press ? at any prompt for
+Rubric v2.2 lives in docs/rubric.md. Keep it open. Press ? at any prompt for
 the condensed gate reference.
 """
 
@@ -405,7 +405,7 @@ def main():
             continue
 
         row.update(result)
-        row["rubric_version"] = "2.1"
+        row["rubric_version"] = "2.2"
         row["annotator"] = args.annotator
         save(path, rows, fieldnames)  # after every report, not at the end
 

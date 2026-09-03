@@ -1,4 +1,4 @@
-# SIF Precursor Classification Rubric v2.1
+# SIF Precursor Classification Rubric v2.2
 
 **Owner:** Member 1 · **Annotators:** Member 1 + Member 3, independently · **Tiebreak:** Member 6
 
@@ -33,9 +33,28 @@ produce, so a synonym here becomes a bug three files away.
 | `lsr_rule` | one of the eight rules below, or `none` |
 | `control_status` | `absent` · `failed` · `present` · `unclear` (leave blank if Gate 1 is not `yes`) |
 | `severity` | 1–5 |
-| `is_sif_precursor` | true / false — determined by the table in §6, never set by feel |
-| `notes` | one line of rationale; **mandatory** for every `insufficient_information`, every `unclear`, and every call you found hard |
-| `rubric_version` | `2.1` |
+| `is_sif_precursor` | true / false — **computed** from §6. See the warning below |
+| `notes` | one line of rationale; **mandatory** for every `insufficient_information`, every `unclear`, and every call where you hesitated between severity 3 and 4 |
+| `rubric_version` | `2.2` |
+
+### `is_sif_precursor` is computed, not judged
+
+In round one, one annotator typed this field by hand on **138 of 180 rows in a way that
+contradicted their own three gate answers** — always resolving to "hazard yes and control failed,
+therefore true", with severity ignored. The two annotators were not applying the same rule at all,
+and the headline agreement number was measuring typing rather than the rubric.
+
+Two safeguards, both mandatory:
+
+1. **Use the tool.** `python label_reports.py --annotator <you>` computes this field from your
+   three gate answers. It cannot get it wrong.
+2. **If you label in a spreadsheet, validate before handing the file over:**
+   `python label_reports.py --annotator <you> --validate` — it reports every row where the typed
+   value disagrees with §6, with line numbers matching Excel.
+
+A file that fails this check must not be merged. An invalid value raises no error downstream;
+`merge_labels.py` simply reads it as a disagreement with the other annotator, so it silently
+lowers the kappa we then quote on stage.
 
 ---
 
@@ -160,24 +179,56 @@ convert every vague report into a precursor.
 
 ## 5. Gate 3 — Plausible variation, and severity
 
-> Change one small, realistic thing — the timing by a few seconds, the position by a metre, or
-> remove a last-second intervention. What happens then?
+### The one-change rule
 
-Score `severity` **on that changed version**, not on what actually happened.
+> Change **exactly one** thing. The timing by a few seconds, **or** the position by a metre,
+> **or** remove one last-second intervention. Then score what happens.
 
-| `severity` | The plausible-variation outcome |
+**One change. Not two, not a chain.** This is the single most important sentence in the rubric,
+because it is where round one fell apart: one annotator changed one thing, the other imagined a
+sequence of unlucky events, and their severities diverged by three or four points on 76 of 180
+reports. If you find yourself thinking "and then, if he had also…", stop — you have made a second
+change. Score the version with one.
+
+Ask it as a question with a yes/no answer: **"Name the one thing that would have to be different,
+and say in one sentence how the person dies or is permanently injured."** If you cannot say it in
+one sentence without a second "and if", the answer is not 5 or 4.
+
+### The bands
+
+Anchored to **observable outcomes**, not adjectives. "Life-altering" meant different things to
+two careful people; "cannot return to the same job" does not.
+
+| `severity` | Test — apply it literally |
 |---|---|
-| 5 | Fatality — one person or several |
-| 4 | Life-altering: amputation, major burn, blindness, serious head or spinal injury, permanent impairment, ICU admission |
-| 3 | Lost-time injury, full recovery expected |
-| 2 | Medical treatment, no lost time |
-| 1 | First aid at most |
+| **5** | **Someone dies.** You can name the mechanism in one sentence, after one change. |
+| **4** | **The person cannot return to the same job.** Amputation, loss of an eye, spinal cord injury, burn needing grafts, permanent restriction. Not "was badly hurt" — permanently unable. |
+| **3** | **Off work, then back to the same job.** Fracture, laceration needing surgery, concussion. Full recovery expected, no permanent restriction. |
+| **2** | **Seen by a doctor, back at work the same or next shift.** Stitches, sprain, minor burn. |
+| **1** | **First aid from the site kit.** Nothing more. |
+
+The line that decides the label sits between **3 and 4**, and it is one question:
+**would this person be permanently unable to do the same job again?** Yes → 4 or 5. No → 3 or below.
+If you are genuinely torn between 3 and 4, the honest answer is 3 — and say so in `notes`.
 
 **Gate 3 passes when `severity` is 4 or 5.**
 
-The change you imagine must be **plausible, not merely conceivable**. "The plank tipped and he
-caught the handrail" — had he not caught it, an 8 m fall: severity 5. "A bolt fell from waist
-height and someone was standing nearby" — no realistic version of that kills anyone: severity 1.
+### Worked calibration
+
+Apply these before you start. If your answer differs, re-read the one-change rule.
+
+| Report | One change | Score | Why |
+|---|---|---|---|
+| Plank tipped at 8 m, he caught the handrail | remove the catch | **5** | One change; he falls 8 m; name the mechanism — head strike on grade |
+| Bolt fell from waist height, someone nearby | move him under it | **1** | A bolt from waist height does not kill or maim |
+| Sling parted, load dropped on an empty deck | move a person under the load | **5** | One change — position |
+| Finger caught in a running conveyor, bruised | a moment later | **4** | Degloving or amputation; cannot return to the same job |
+| Slipped on a wet floor, wrist fracture | none available that kills | **3** | Off work, then back. There is no one change that makes this fatal |
+| Arc flash at 480 V, burns to the face | stand closer | **5** | One change — position |
+| Vehicle rollover, seatbelt not worn | none needed | **5** | Already ejection-capable; actual outcome was spinal |
+
+**An actual fatality, amputation, or permanent restriction in the report scores 5 or 4 by
+definition.** Do not talk yourself down from an outcome that already happened.
 
 **An actual fatality, amputation, or ICU admission in the report scores 4 or 5 by definition.**
 Do not talk yourself down from an outcome that already happened.
@@ -339,6 +390,31 @@ document agree 88% of the time, no classifier can honestly claim 95%.
 ---
 
 ## Changelog
+
+- **v2.2** — revised after the first agreement check failed. Severity was the broken gate:
+  annotators agreed on it **14.4%** of the time, splitting by three or four points on 76 of 180
+  reports, and because Gate 3 keys on `severity >= 4` that fed straight into the label. Derived
+  agreement on `is_sif_precursor` was **52.2%, Cohen's kappa 0.083**.
+
+  Two causes, both addressed here rather than by adjudicating the disputed rows:
+
+  1. **The plausible-variation instruction did not bound the number of changes.** One annotator
+     changed one thing; the other imagined a chain. §5 now states the one-change rule first and
+     gives a one-sentence test for it.
+  2. **The bands were adjectives.** "Life-altering" calibrated differently for two careful
+     people. The bands are now observable outcomes, the 3/4 boundary is a single question —
+     *can this person return to the same job?* — and seven worked calibration examples are
+     included to be read before labelling starts.
+
+  §2 additionally makes explicit that `is_sif_precursor` is computed, never typed, after one
+  annotator's typed values contradicted their own gate answers on 138 of 180 rows.
+
+  > **TO BE COMPLETED BY MEMBER 1.** A second labelling round produced raw 79.4%, kappa 0.595.
+  > Record here what actually changed between the rounds — whether both annotators re-labelled
+  > independently against a revised rubric, or the files were adjudicated. The two are different
+  > claims and only one of them is a ceiling. Until this line is filled in, quote the round-one
+  > number, not 0.595. Run `python check_independence.py` on the final pair before quoting
+  > anything.
 
 - **v2.1** — applied the three defects found by the [rubric red-team](red-team-reports.md) before
   labelling began, so no re-labelling is required. Added a chemical-hazard ruling (the eight IOGP
