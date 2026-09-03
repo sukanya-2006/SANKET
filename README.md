@@ -17,13 +17,25 @@ It never closes a report. It reorders the reading queue.
 |---|---|
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | **v2, authoritative.** If any other write-up disagrees, this wins |
 | [NAMES.md](NAMES.md) | Locked field names. Read before writing a line of code, SQL, or UI |
-| [docs/rubric.md](docs/rubric.md) | v2.1 — the three gates, how to apply them, the labelling protocol |
+| [docs/rubric.md](docs/rubric.md) | v2.2 — the three gates, how to apply them, the labelling protocol |
 | [docs/schedule.md](docs/schedule.md) | 20 days to 20 Sep — dated plan, checkpoints, slip triggers |
 | [docs/handoff/](docs/handoff/) | One page per member: what is waiting for you and how to plug it in |
 
 **The naming rule matters more than it looks.** Field names drifted across three drafts of the
 plan before v2. If you find yourself typing `category`, `hazard_category`, or `barrier_status`,
 stop — the fields are `lsr_rule` and `control_status`.
+
+---
+
+## Lost? Run this first
+
+```bash
+python doctor.py                 # what is wired, what is missing, what to do next
+python doctor.py --member 5      # ...and your specific next steps
+python doctor.py --tests         # also run the suite
+```
+
+It never modifies anything. If a component is missing it names the command that fixes it.
 
 ---
 
@@ -54,13 +66,13 @@ Verified from a clean clone: 36 tests pass with no API key and no database.
 |---|---|
 | **API** | ✅ All endpoints live: `/analyze`, `/reports`, six `/aggregate/*`, `/meta`, `/health` |
 | **Classification pipeline** | ✅ Cache → primary → retry once → baseline fallback → `is_fallback` |
-| **Real classifier** | ✅ Groq (`openai/gpt-oss-20b`) prompted with rubric v2.1, registered in the primary slot. Needs `GROQ_API_KEY` |
+| **Real classifier** | ✅ Groq (`openai/gpt-oss-20b`) prompted with the rubric, registered in the primary slot. Needs `GROQ_API_KEY` |
 | **TF-IDF baseline** | ⚠️ Written, **not yet trained** — needs `gold_labels.csv`. Until then the fallback answers with the keyword stub |
 | **Aggregation** | ✅ Rate-based density ranking, small-denominator guard, OSHA exclusion. Plain SQL when a database is configured, Python over the stub when not |
 | **Database** | ⚠️ Schema written, constraints encode the rubric. **No live instance** — no `backend/.env` yet |
-| **Rubric** | ✅ v2.1, locked gates, sources separated from our own calibration |
+| **Rubric** | ✅ v2.2 — severity anchors rewritten after round one failed its agreement check |
 | **Dataset** | ✅ 150 synthetic + 30 real OSHA reports, with metadata |
-| **Labelling** | 🔴 **0 of 180 by either annotator — this is the critical path** |
+| **Labelling** | ⚠️ Round 1 complete (akanksha + sukanya, 180 each). **It failed the agreement check** — see below |
 | **Tests** | ✅ 36, all real, no skips, hermetic |
 | **Frontend** | 🔴 Not started — Member 5 |
 
@@ -75,28 +87,48 @@ Two honesty properties worth knowing before you demo anything:
 
 ## The critical path
 
-Everything downstream is blocked on one thing.
-
 ```
-labelling (M1 + M3, 0/180)  ──▶  merge_labels.py  ──▶  gold_labels.csv
-                                                            │
-                        ┌───────────────────────────────────┤
-                        ▼                                   ▼
-              train_baseline.py                     load_reports.py
-              (baseline F1/PR-AUC)                  batch_classify.py
-                        │                                   │
-                        └──────────▶  eval table  ◀─────────┘
-                                    (the pitch's core number)
+labelling  ──▶  merge_labels.py  ──▶  gold_labels.csv
+                                            │
+                    ┌───────────────────────┤
+                    ▼                       ▼
+          train_baseline.py         load_reports.py
+          (baseline F1/PR-AUC)      batch_classify.py
+                    │                       │
+                    └────▶  eval table  ◀───┘
+                          (the pitch's core number)
 ```
 
-Label with `python label_reports.py --annotator <you>` — one report at a time, enums enforced,
-`is_sif_precursor` derived from the rubric's §6 decision table rather than eyeballed, notes
-required where the rubric demands them, and saved after every row so a crash costs one report.
-**It never suggests a label** — that is the whole reason the kappa means anything.
+### Round one failed its agreement check — read this before quoting a number
 
-Both annotators label all 180 **independently**, with no discussion of any case until both are
-completely finished. That independence is what makes Cohen's kappa mean anything, and it is the
-answer to the hardest question a judge will ask: *"you wrote the reports and graded yourself."*
+Both annotators completed 180 reports. Agreement on the **derived** `is_sif_precursor` was
+**52.2%, Cohen's kappa 0.083**. Two causes, both now fixed in the rubric rather than papered over:
+
+- **Severity was the broken gate** — 14.4% agreement, splitting by 3–4 points on 76 of 180
+  reports. Rubric v2.2 replaces the adjectival bands with observable outcomes and adds the
+  **one-change rule**.
+- **One annotator typed `is_sif_precursor` by hand**, contradicting their own gate answers on
+  138 of 180 rows. That error alone inflated the headline from 0.083 to a flattering 0.309.
+
+A second round has reported raw 79.4% / kappa 0.595. **Whether that is a ceiling depends on how
+those files were produced** — an independent re-label against the revised rubric is quotable; an
+adjudicated pair is not, because its agreement is high by construction. Run:
+
+```bash
+python check_independence.py --a <A>.csv --b <B>.csv --baseline-a <A_orig>.csv --baseline-b <B_orig>.csv
+```
+
+### For annotators
+
+`python label_reports.py --annotator <you>` — one report at a time, enums enforced,
+`is_sif_precursor` **computed** from the §6 table rather than eyeballed, and saved after every
+row. **It never suggests a label** — that is the whole reason the kappa means anything.
+
+Labelling in a spreadsheet instead? Run `--validate` before handing the file over.
+
+Both annotators work **independently**, no discussion of any case until both are completely
+finished. That independence is the answer to the hardest question a judge will ask:
+*"you wrote the reports and graded yourself."*
 
 ---
 
@@ -106,7 +138,7 @@ answer to the hardest question a judge will ask: *"you wrote the reports and gra
 NAMES.md                  locked field names
 docs/
   TECH_STACK.md           v2, authoritative
-  rubric.md               v2.1 labelling rubric
+  rubric.md               v2.2 labelling rubric
   handoff/                one page per member
   demo-script.md          5-minute script, word for word
   hostile-qa.md           40 questions with model answers
@@ -114,6 +146,8 @@ docs/
   red-team-reports.md     15 adversarial reports for the rubric
   rehearsal.md            drills and per-member cheat sheets
 
+doctor.py                     project status + per-member next steps  <- start here
+check_independence.py         is an agreement number a ceiling, or contaminated?
 create_labeling_template.py   per-annotator worksheet generator
 label_reports.py              terminal labelling tool — one report at a time, resumable
 merge_labels.py               agreement %, Cohen's kappa, writes gold_labels.csv
@@ -142,7 +176,7 @@ backend/
     sql/aggregates.sql    one named statement per aggregate
   tests/                  36 hermetic tests
 frontend/                 Member 5
-data/                     150 synthetic + 30 OSHA reports, annotator worksheets
+data/                     reports + label files - see data/README.md for which is which
 render.yaml               Member 6 — API deployment
 ```
 
