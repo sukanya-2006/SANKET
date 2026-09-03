@@ -2,7 +2,7 @@
 classifier_llm.py
 
 The real classifier. One structured Groq API call per report, prompted with
-rubric v2.1's three gates, returning the exact schema shape `classifier.py`
+rubric v2.2's three gates, returning the exact schema shape `classifier.py`
 expects (see schemas.py: ClassificationResult).
 
 This module does NOT touch classifier.py's cache/timeout/fallback logic -
@@ -36,7 +36,7 @@ def _get_client() -> Groq:
     return _client
 
 # ---------------------------------------------------------------------------
-# Rubric v2.1, condensed into a system prompt. This is not the full document -
+# Rubric v2.2, condensed into a system prompt. This is not the full document -
 # it's the operative gates and the decision table, which is what the model
 # actually needs to apply consistently. Full text lives in docs/rubric.md.
 # ---------------------------------------------------------------------------
@@ -118,20 +118,30 @@ sounds on its own.
 Concretely ask two things before assigning 4 or 5:
 (a) Was the person's body actually in a position where the failure mode could reach them? A
     hazard existing nearby is not the same as the person being exposed to its consequences.
-(b) Is the escalation path SHORT and DIRECT - one plausible step from where the report ends to
-    death/permanent injury - not a chain of several unlikely things all going wrong at once?
+(b) THE ONE-CHANGE RULE. You may change EXACTLY ONE thing: the timing by a few seconds, OR the
+    position by a metre, OR remove one last-second catch or rescue. Not two. Not a chain. If you
+    catch yourself thinking "and then, if he had also...", you have made a second change - go
+    back and score the version with one. Two human annotators diverged by three and four points
+    on 76 of 180 reports precisely because one of them chained changes and the other did not.
 
-1 = first aid at most, and the hazard has no realistic path to worse (same-level slip, minor
-    sharps, a control that meaningfully reduced exposure even if not perfectly "present")
-2 = medical treatment, no lost time, genuinely low worst-case potential - e.g. a hazard existed
-    but the person's actual exposure to its failure mode was marginal or brief
-3 = lost-time injury, AND the plausible worst-case is a serious-but-recoverable injury (broken
-    bone, deep laceration) - not death or permanent disability. This is a common, legitimate
+THE BANDS. Judge by the observable outcome, not by how serious the situation sounds. These are
+the same words the human annotators are applying, and you are scored against their labels.
+
+1 = first aid from a site kit, nothing more. The hazard has no realistic path to worse
+    (same-level slip, minor sharps, a control that meaningfully reduced exposure).
+2 = seen by a doctor, back at work the same or next shift. Stitches, sprain, minor burn. A
+    hazard existed but the person's exposure to its failure mode was marginal or brief.
+3 = off work for a while, THEN BACK TO THE SAME JOB. Fracture, deep laceration needing surgery,
+    concussion. Full recovery expected, no permanent restriction. This is a common, legitimate
     landing point - do not treat 3 as a rare exception.
-4 = life-altering plausible outcome (amputation, major burn, blindness, serious head/spinal
-    injury, permanent impairment) - reserve this for scenarios where the escalation from what
-    happened to this outcome is direct and short, not several steps removed
-5 = fatality is a plausible, direct outcome of the counterfactual variation
+4 = THE PERSON CANNOT RETURN TO THE SAME JOB. Amputation, loss of an eye, spinal cord injury,
+    burn needing grafts, permanent restriction. Not "was badly hurt" - permanently unable.
+5 = someone dies, and you can name the mechanism in one sentence after ONE change.
+
+THE 3/4 BOUNDARY IS THE ONE THAT DECIDES THE LABEL, and it is a single question:
+    "Would this person be permanently unable to do the same job again?"
+    Yes -> 4 or 5.   No -> 3 or below.
+If you are genuinely torn between 3 and 4, answer 3 and say why in `reasoning`.
 
 An actual fatality, amputation, or ICU admission in the report scores 4 or 5 by definition. But a
 mild actual outcome does NOT automatically mean high severity either, and neither does a hazard
@@ -208,7 +218,7 @@ def classify(report_text: str) -> dict:
         result["control_status"] = None
 
     # Recompute is_sif_precursor ourselves from the three gates, per the rubric's own
-    # decision table (v2.1 §6) - never trust the model's boolean directly. The model
+    # decision table (v2.2 §6) - never trust the model's boolean directly. The model
     # can be internally inconsistent (e.g. returning severity=3 AND
     # is_sif_precursor=true in the same response, which the rubric says is invalid).
     # A database check constraint caught exactly this once; deriving the boolean
@@ -224,7 +234,10 @@ def classify(report_text: str) -> dict:
 
 
 # Required by the Classifier protocol in classifier.py
+# The version string ends up in predictions.model_version and scopes every dashboard
+# aggregate, so it must change whenever the prompt does - otherwise old and new judgements
+# are averaged together silently.
 # Bumped to distinguish predictions made under the g3fix3 severity-calibration
 # examples (short-fall / quick-recovery worked examples added to Gate 3) from
 # earlier g3fix2 predictions - lets the resumable reclassify script tell them apart.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.1-g3fix3"
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2"
