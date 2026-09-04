@@ -9,7 +9,7 @@ data/gold_labels.csv.
 Rows where both annotators agree on is_sif_precursor use that agreed
 label directly. Rows where they disagree are NOT silently resolved here -
 they're written to data/labeling_disagreements.csv for the tiebreaker
-(M6) to review and adjudicate by hand, per rubric v2.1 section 10's
+(M6) to review and adjudicate by hand, per rubric v2.2 section 10's
 protocol. gold_labels.csv will have blank judgment fields for those rows
 until the tiebreak happens - this is intentional, not a bug in the script.
 
@@ -77,7 +77,7 @@ def main():
     print("  (This is the ceiling your classifier gets measured against.)")
 
     if raw_agreement < 0.70:
-        print("\n  [!] Below 70% agreement. Per rubric v2.1 section 10: revise the "
+        print("\n  [!] Below 70% agreement. Per rubric v2.2 section 10: revise the "
               "rubric on whichever gate is splitting, then re-label ONLY the "
               "reports that turned on that gate - not all 180 again.")
 

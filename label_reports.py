@@ -21,7 +21,7 @@ What it DOES do, beyond saving you from Excel:
 
   * Enforces the enums, so no typo silently becomes an invalid label that
     merge_labels.py then treats as a disagreement.
-  * Skips Gate 2 when Gate 1 is not `yes`, per rubric v2.1 section 2 - the
+  * Skips Gate 2 when Gate 1 is not `yes`, per rubric v2.2 section 2 - the
     database rejects a control_status without a hazard anyway.
   * DERIVES is_sif_precursor from the section 6 decision table rather than
     asking you. The rubric says this field is "never set by feel", and the
@@ -89,10 +89,23 @@ RUBRIC_HELP = """
     A control that stopped the event is `present` even if damaged doing so.
 
   GATE 3 - severity, scored on the PLAUSIBLE VARIATION, not what happened
-    5 - fatality        4 - life-altering (amputation, major burn, spinal,
-    3 - lost time           permanent impairment, ICU)
-    2 - medical treatment   1 - first aid at most
-    An actual fatality/amputation/ICU scores 4-5 by definition - but that
+
+    THE ONE-CHANGE RULE: change EXACTLY one thing - the timing by a few
+    seconds, OR the position by a metre, OR remove one last-second catch.
+    Not two. Not a chain. If you think "and then, if he had also..." you
+    have made a second change; score the version with one.
+
+    5 - someone dies, and you can name the mechanism in one sentence
+    4 - THE PERSON CANNOT RETURN TO THE SAME JOB (amputation, lost eye,
+        spinal, burn needing grafts, permanent restriction)
+    3 - off work, THEN BACK TO THE SAME JOB (fracture, laceration,
+        concussion) - full recovery, no permanent restriction
+    2 - seen by a doctor, back the same or next shift
+    1 - first aid from the site kit
+
+    THE 3/4 LINE DECIDES THE LABEL. One question: would this person be
+    permanently unable to do the same job again? Torn -> answer 3.
+    An actual fatality/amputation scores 4-5 by definition - but that
     governs severity ONLY, never Gate 1.
 
   is_sif_precursor is DERIVED: hazard yes AND control absent/failed AND
@@ -130,7 +143,7 @@ def is_labelled(row):
 
 
 def derive_precursor(hazard, control, severity):
-    """Rubric v2.1 section 6. Never set by feel."""
+    """Rubric v2.2 section 6. Computed, never judged."""
     return hazard == "yes" and control in ("absent", "failed") and int(severity) >= 4
 
 
@@ -238,7 +251,7 @@ def label_one(row):
 
 
 def validate(rows, path):
-    """Check a hand-edited CSV against rubric v2.1 before it reaches merge_labels.py.
+    """Check a hand-edited CSV against rubric v2.2 before it reaches merge_labels.py.
 
     Worth running even if you labelled in Excel rather than with this tool. An invalid value
     does not error anywhere downstream - merge_labels.py just reads it as a disagreement with
@@ -353,7 +366,7 @@ def main():
     parser.add_argument("--annotator", required=True, help="your name, matching the CSV filename")
     parser.add_argument("--stats", action="store_true", help="show progress and stop")
     parser.add_argument("--validate", action="store_true",
-                        help="check the CSV against rubric v2.1 and stop "
+                        help="check the CSV against rubric v2.2 and stop "
                              "(run this if you labelled in Excel)")
     parser.add_argument("--review", type=int, metavar="N",
                         help="re-label report at position N (1-based), overwriting it")
@@ -388,7 +401,7 @@ def main():
         return
 
     total = len(rows)
-    print(__doc__.split("Rubric v2.1")[0].strip())
+    print(__doc__.split("Rubric v2.2")[0].strip())
     print(f"\n  {len(targets)} reports left. Press ? for the gate reference, "
           f"s to skip, q to stop.\n")
 

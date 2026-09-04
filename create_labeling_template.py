@@ -14,7 +14,7 @@ Reads:  data/synthetic/synthetic_reports_for_labeling.csv  (150 reports)
 
 Writes: data/gold_labels_<annotator>.csv
 
-Fill in these columns for every row, using rubric v2.1's three gates:
+Fill in these columns for every row, using rubric v2.2's three gates:
     hazard_assessment   -> yes / no / insufficient_information
     lsr_rule            -> energy_isolation / hot_work / confined_space /
                             line_of_fire / work_at_height / lifting /
@@ -110,7 +110,7 @@ def main():
     print(f"({len(combined[combined['source'] == 'synthetic'])} synthetic, "
           f"{len(combined[combined['source'] == 'osha'])} OSHA)")
     print("\nOpen it in Excel or Google Sheets and fill in the 6 judgment "
-          "columns for every row, using rubric v2.1.")
+          "columns for every row, using rubric v2.2.")
 
 
 if __name__ == "__main__":

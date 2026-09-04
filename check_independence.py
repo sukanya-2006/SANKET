@@ -58,7 +58,7 @@ def truthy(v):
 
 
 def derive(row):
-    """Rubric v2.1 section 6. This is what is_sif_precursor is DEFINED as."""
+    """Rubric v2.2 section 6. This is what is_sif_precursor is DEFINED as."""
     hazard = (row.get("hazard_assessment") or "").strip()
     control = (row.get("control_status") or "").strip()
     try:
