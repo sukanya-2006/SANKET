@@ -93,13 +93,23 @@ def _scope() -> list[ReportDetail]:
 
     Mirrors the `WHERE r.source <> 'osha' AND l.model_version = %(model_version)s` clause and
     the latest-prediction-per-report join that the SQL path uses.
+
+    The version filter is a DATABASE concern. `predictions` is append-only, so it accumulates
+    judgements from every model that has ever run and a rate computed across two of them
+    measures neither. The seeded stub is one coherent snapshot with nothing to mix, and its
+    rows are stamped `stub-0.1.0` — so filtering it against whichever classifier happens to be
+    registered drops all 180 rows and every dashboard endpoint returns empty. That is the
+    mirror of the bug the version lookup was added to fix, and it bites on a fresh clone with
+    no database, which is exactly how the frontend is developed.
     """
+    rows = repository.all_reports()
+    synthetic = [r for r in rows if r.source != "osha"]
+
+    if not db.is_live():
+        return synthetic
+
     current_version = _current_model_version()
-    return [
-        r
-        for r in repository.all_reports()
-        if r.source != "osha" and r.model_version == current_version
-    ]
+    return [r for r in synthetic if r.model_version == current_version]
 
 
 def _rate(precursors: int, total: int) -> float:

@@ -566,3 +566,26 @@ def test_queue_puts_precursors_first_then_severity():
     assert flags == sorted(flags, reverse=True), "precursors must lead the queue"
     severities = [i["severity"] for i in items if i["is_sif_precursor"]]
     assert severities == sorted(severities, reverse=True)
+
+
+def test_dashboard_is_not_empty_when_a_real_classifier_is_registered(swap_classifiers):
+    """The seeded stub must survive the model_version filter.
+
+    predictions is append-only so aggregates scope to one model version — but the seeded stub
+    is a single snapshot stamped stub-0.1.0. Filtering it against whichever classifier is
+    registered dropped all 180 rows, and every dashboard endpoint returned empty on a fresh
+    clone with no database. That is exactly how Member 5 develops.
+    """
+    def real(text):
+        from app.stub import classify_stub
+
+        return classify_stub(text)
+
+    real.version = "groq-openai/gpt-oss-20b-rubric-v2.2"
+    swap_classifiers(primary=real, baseline=_baseline_stub())
+
+    body = client.get("/aggregate/sites").json()
+    assert body["ranked"], "dashboard went empty — the version filter ate the seeded stub"
+    assert body["ranked"][0]["site"] == "Rig 4"
+    assert client.get("/aggregate/summary").json()["total_reports"] == 150
+    assert client.get("/aggregate/trend").json()
