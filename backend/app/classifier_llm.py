@@ -56,9 +56,18 @@ pressure, stored mechanical/hydraulic energy, live process fluid)
 - work_at_height: a person, tool, or material able to fall far enough to kill or maim
 - lifting: cranes, hoists, rigging, slings, forklifts, suspended/swinging loads
 - line_of_fire: a person in the path of something moving, energised, or pressurised
+- line_of_fire also includes caught-in, caught-between, pinch-point, crush, kickback,
+  and unguarded-moving-part events when a person's body is exposed to the movement
+  or release of mechanical energy. Examples include hands caught in rollers/chucks,
+  machinery pinch points, moving machine parts, and material kicked back toward a worker.
 - confined_space: entry into a tank, vessel, pit, or space with restricted egress or hazardous atmosphere
 - hot_work: welding, cutting, grinding, or an ignition source near flammables
 - driving: operating a vehicle on site or public road
+- When a vehicle itself is moving and strikes, pins, or runs over a person, classify
+  the primary hazard as driving. When the hazard is a load being lifted, suspended,
+  swung, or dropped by equipment, classify it as lifting. When the primary exposure
+  is a moving object or machine part striking/catching a person, classify it as
+  line_of_fire.
 - permit_to_work: work requiring authorisation that was not raised, valid, or followed (fallback \
 category only - use when no other category fits better)
 
@@ -100,10 +109,12 @@ explicitly: "if the timing shifted by a few seconds, the position by a metre, or
 catch/rescue had NOT happened, what is the REALISTIC outcome THEN?" - realistic, not the most
 dramatic thing you can imagine. This is a genuine discriminating judgement, not a reflex - most
 Gate-1-yes reports should NOT automatically land at 4 or 5. Base rate check: across a large set
-of real safety reports where a hazard was present, only roughly one in five plausibly escalates
-to a life-altering or fatal outcome. If you find yourself scoring 4 or 5 for most reports you
-read, you are almost certainly over-scoring - stop and re-examine what specifically makes THIS
-scenario's worst case severe, rather than defaulting to "height/energy/confined space = severe."
+of real safety reports where a hazard was present, roughly one in five plausibly escalates to a
+life-altering or fatal outcome — but this is a rough guide, not a quota. Score each report on its
+own facts. If the realistic worst-case outcome described genuinely involves permanent disability
+or death, score it 4 or 5 even if that means several reports in a row land there. Do not lower a
+score just to keep your overall distribution near one-in-five — that number describes the dataset
+as a whole, not any individual judgement.
 
 Two worked examples to calibrate against:
 - A contractor on a ladder loses footing and falls six inches onto a padded floor, spraining a
@@ -140,7 +151,19 @@ the same words the human annotators are applying, and you are scored against the
 4 = THE PERSON CANNOT RETURN TO THE SAME JOB. Amputation, loss of an eye, spinal cord injury,
     burn needing grafts, permanent restriction. Not "was badly hurt" - permanently unable.
 5 = someone dies, and you can name the mechanism in one sentence after ONE change.
+IMPORTANT SEVERITY CALIBRATION:
+Do not downgrade severity simply because the report says "hospitalized" or does not explicitly
+state a permanent disability. Judge the realistic outcome under the ONE-CHANGE RULE.
 
+Use severity 4 when the described mechanism could realistically cause permanent loss of function,
+amputation, major disabling injury, or inability to return to the same job after ONE change.
+Use severity 5 when ONE realistic change could result in death.
+
+For vehicle strikes, crushing/pinning, severe falls, major machinery entrapment, falling heavy
+objects, electrical contact, or serious head/neck injuries, explicitly consider whether ONE
+small change in timing, position, or containment could produce a fatal or permanently disabling
+outcome. Do not automatically assign severity 2 or 3 merely because the reported injury was
+"hospitalized" or described as a fracture.
 THE 3/4 BOUNDARY IS THE ONE THAT DECIDES THE LABEL, and it is a single question:
     "Would this person be permanently unable to do the same job again?"
     Yes -> 4 or 5.   No -> 3 or below.
@@ -170,7 +193,6 @@ Respond with ONLY a single JSON object, no markdown fences, no commentary, match
   "flagged_phrases": [<short exact phrases from the report text that drove your decision>],
   "reasoning": "<one or two sentences explaining the gates and the decision>"
 }"""
-
 
 def _extract_json(raw_text: str) -> dict:
     """Strip markdown fences if the model added them despite instructions, then parse."""
