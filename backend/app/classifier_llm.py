@@ -19,7 +19,10 @@ generate_synthetic_reports_free.py).
 import os
 import json
 import re
+from dotenv import load_dotenv
 from groq import Groq
+
+load_dotenv()
 
 MODEL_NAME = "openai/gpt-oss-20b"  # same free-tier model already in use elsewhere
 
@@ -188,19 +191,28 @@ def classify(report_text: str) -> dict:
     should raise on any hard failure (network error, bad JSON) rather than try
     to patch things up - that's what the fallback pipeline is for.
     """
-    response = _get_client().chat.completions.create(
-        model=MODEL_NAME,
-        max_tokens=3000,  # generous headroom - gpt-oss-20b spends tokens on internal
-                          # reasoning before the visible answer; too low silently
-                          # truncates to an empty response (finish_reason="length")
-        temperature=0.1,  # low temperature - this is a classification task, not creative writing
-        reasoning_effort="low",  # rubric gives explicit rules; deep reasoning isn't
-                                  # needed and just burns the token budget
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Classify this safety report:\n\n{report_text}"},
-        ],
-    )
+    response = None
+    for attempt in range(5):
+        try:
+            response = _get_client().chat.completions.create(
+                model=MODEL_NAME,
+                max_tokens=1200,  # headroom for response + reasoning, fits within Groq TPM limit
+                temperature=0.1,  # low temperature - this is a classification task, not creative writing
+                reasoning_effort="low",  # rubric gives explicit rules; deep reasoning isn't
+                                          # needed and just burns the token budget
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Classify this safety report:\n\n{report_text}"},
+                ],
+            )
+            break
+        except Exception as exc:
+            err_str = str(exc).lower()
+            if ("429" in err_str or "rate_limit" in err_str or "connection" in err_str or "socket" in err_str or "unreachable" in err_str) and attempt < 4:
+                import time
+                time.sleep(3.0 * (attempt + 1))
+                continue
+            raise
 
     raw_content = response.choices[0].message.content
 

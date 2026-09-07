@@ -262,3 +262,4 @@ January2015toNovember2025.csv
 backend/app/baseline_model.joblib
 backend/app/baseline_top_words.json
 backend/app/baseline_train_ids.json
+backend/app/llm_cache.sqlite

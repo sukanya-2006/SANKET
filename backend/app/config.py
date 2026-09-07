@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # floor even if .env doesn't set LLM_TIMEOUT_SECONDS at all.
     llm_timeout_seconds: float = 25.0
 
-    cache_path: Path = Path("cache.sqlite3")
+    cache_path: Path = Path("backend/app/llm_cache.sqlite")
     cache_enabled: bool = True
 
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
