@@ -42,7 +42,11 @@ def cache_key(report_text: str, prompt_version: str | None = None) -> str:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(get_settings().cache_path, timeout=5)
+    path = get_settings().cache_path
+    # sqlite will not create a missing parent directory; it just reports "unable to open
+    # database file", which reads like a permissions problem and is not one.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=5)
     conn.execute(_SCHEMA)
     return conn
 
