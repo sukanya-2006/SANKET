@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # and a premature timeout wastes a perfectly good answer by discarding
     # it in favour of the much weaker stub fallback. This value is the
     # floor even if .env doesn't set LLM_TIMEOUT_SECONDS at all.
-    llm_timeout_seconds: float = 25.0
+    llm_timeout_seconds: float = 60.0
 
     cache_path: Path = Path("backend/app/llm_cache.sqlite")
     cache_enabled: bool = True
