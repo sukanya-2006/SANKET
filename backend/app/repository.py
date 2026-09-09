@@ -4,8 +4,10 @@ Every read in the API goes through here. When `SUPABASE_DB_URL` is set the queri
 `sql/aggregates.sql` run against Postgres; when it is not, the seeded stub answers with the same
 shapes. Callers cannot tell, which is what let the frontend be built on day 3.
 
-The live path is written but **unverified until a Supabase project exists** — see
-docs/handoff/member-4-remaining.md. The stub path is the one under test.
+Both paths are now verified. The live path ran against Supabase on 9 Sep and all six
+/aggregate/* endpoints returned real rows; the stub path is the one under automated test,
+because the suite has no database. That gap is real and it is where seven bugs hid — see
+docs/database-live.md before assuming a passing suite means the live path works.
 """
 
 from __future__ import annotations

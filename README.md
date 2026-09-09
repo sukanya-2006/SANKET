@@ -35,6 +35,32 @@ python doctor.py --member 5      # ...and your specific next steps
 python doctor.py --tests         # also run the suite
 ```
 
+### Bringing the database up
+
+The API runs fine with no database - it serves a seeded stub and Member 5 is never blocked.
+To run against real data you need `SUPABASE_DB_URL` and `GROQ_API_KEY` in `backend/.env`,
+which is gitignored and stays that way.
+
+```bash
+python -c "import sys; sys.path.insert(0,'backend'); from app import db; db.apply_schema()"
+python load_reports.py         # 150 synthetic + 30 OSHA
+python load_gold_labels.py     # 534 human labels; prints every correction it applies
+python batch_classify.py       # one Groq call per report, resumable
+python agreement.py            # the inter-annotator ceiling
+```
+
+`/health` tells you which mode you are in: `data_source` is either `postgres` or
+`seeded_stub`.
+
+**`batch_classify.py` takes about 75 minutes for a full pass.** That is the Groq free tier,
+not the model - it caps tokens per minute, and our prompt is large enough that the ceiling
+works out at roughly two calls a minute. The script paces at 25 seconds and refuses to store a
+baseline answer, so an interrupted run costs nothing but the reports it had not reached.
+
+What running this against a real database found the first time, and why none of it showed up
+in the test suite: [docs/database-live.md](docs/database-live.md).
+
+
 It never modifies anything. If a component is missing it names the command that fixes it.
 
 ---
@@ -153,6 +179,8 @@ label_reports.py              terminal labelling tool — one report at a time, 
 merge_labels.py               agreement %, Cohen's kappa, writes gold_labels.csv
 train_baseline.py             trains the TF-IDF baseline (needs gold_labels.csv)
 load_reports.py               loads reports into Supabase
+load_gold_labels.py           loads the human labels into Supabase, applying the rubric
+agreement.py                  Cohen's kappa from the database, per gate
 batch_classify.py             runs the real classifier over every stored report
 reclassify_fallbacks.py       retries reports that only got a fallback answer
 generate_synthetic_reports_free.py · extract_osha.py · patch_synthetic_reports.py
