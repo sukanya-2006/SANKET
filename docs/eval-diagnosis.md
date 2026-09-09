@@ -81,21 +81,53 @@ have since moved.
 
 ---
 
-## Which base rate is correct?
+## Which base rate is correct? — ANSWERED
 
-This is the question the team has to answer, and it is not a modelling question.
+**The labels are not miscalibrated. The dataset is enriched by construction.**
 
-- **The master plan designed for 20–25%** and says "never rebalance — it flatters every model."
-- **The gold labels say 59%.**
-- The evaluation flags it itself: `[!] outside the plan's 20-25% band`.
+`generate_synthetic_reports_free.py` generates every report from a `hazard_type_hint`:
 
-Either the dataset is genuinely more hazardous than intended, or severity is being scored too
-generously in the labels. Recall that human severity agreement was **60%** even in the good
-round, and that severity is what gates the label — so the ground truth is weakest exactly where
-it matters most.
+```
+confined_space_entry 31 · equipment_machinery_hazard 23 · ppe_noncompliance 21
+fire_or_gas_leak_near_miss 19 · fall_from_height 16 · slip_trip_hazard 14
+energy_isolation_failure 14 · vehicle_pedestrian_interaction 12
+```
 
-Whatever the answer, **the prompt and the labels must agree.** They currently pull in opposite
-directions, and the LLM is being scored on the gap.
+**0 of 150 reports were generated without a hazard.** The 59% then follows arithmetically:
+
+| | |
+|---|---|
+| `hazard_assessment = yes` | 133/144 — **92%** |
+| control `absent` or `failed` | 124/133 — **93%** |
+| `severity >= 4` | 89/144 |
+| **precursors** | **59%** |
+
+The plan's 20–25% is the rate in a *realistic* report stream, where most reports are wet floors,
+housekeeping and ergonomics. Ours has a hazard in every single report. The annotators labelled
+what was in front of them, correctly.
+
+### What follows
+
+1. **The prompt's "roughly one in five" was factually wrong for this data**, and the model was
+   penalised for obeying it. Removed — the prompt now says to judge each report on its own facts
+   and not to calibrate to an expected base rate at all. `prompt_version` bumped to `v4`, so
+   cached answers are invalidated.
+2. **The 20–25% claim cannot be made about this dataset.** A judge who has read the problem
+   statement — which cites 20–25% — will notice ours is 59%. Say it first, with the reason.
+3. **The baseline/LLM comparison is still valid.** Both are scored on the same data, so the
+   enrichment does not favour either. What it does mean is that the task is easier than a real
+   stream: with 92% Gate-1-yes, almost all the discriminating work sits in Gates 2 and 3.
+
+### Fixing the dataset is not realistic now
+
+Reaching 22% from 89 precursors needs ~405 total reports — about 260 more, each needing two
+independent human labels. That is not available in the remaining days. **Disclose rather than
+rebalance**, and note that rebalancing after the fact is exactly what the plan warns against.
+
+The honest sentence: *"Our set runs at 59% precursors, not the 20–25% the problem statement
+cites, because our generator centred every synthetic report on a hazard category. That makes our
+absolute rate unrepresentative of a real report stream. It does not affect the baseline-versus-LLM
+comparison, which runs on the same data for both."*
 
 ---
 

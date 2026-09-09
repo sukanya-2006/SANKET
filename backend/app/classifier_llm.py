@@ -107,14 +107,19 @@ GATE 3 - SEVERITY (severity, 1-5) - always score this, for every report
 CRITICAL: score the PLAUSIBLE WORST-CASE variation, never the actual reported outcome. Ask
 explicitly: "if the timing shifted by a few seconds, the position by a metre, or a last-second
 catch/rescue had NOT happened, what is the REALISTIC outcome THEN?" - realistic, not the most
-dramatic thing you can imagine. This is a genuine discriminating judgement, not a reflex - most
-Gate-1-yes reports should NOT automatically land at 4 or 5. Base rate check: across a large set
-of real safety reports where a hazard was present, roughly one in five plausibly escalates to a
-life-altering or fatal outcome — but this is a rough guide, not a quota. Score each report on its
-own facts. If the realistic worst-case outcome described genuinely involves permanent disability
-or death, score it 4 or 5 even if that means several reports in a row land there. Do not lower a
-score just to keep your overall distribution near one-in-five — that number describes the dataset
-as a whole, not any individual judgement.
+dramatic thing you can imagine. This is a genuine discriminating judgement, not a reflex - a
+Gate-1-yes report does NOT automatically land at 4 or 5.
+
+Score each report on its own facts, and do NOT calibrate to how often you expect severe reports
+to occur. You have no reliable information about the base rate of the set you are reading, and
+guessing at it makes you wrong on the report in front of you. If the realistic worst-case outcome
+genuinely involves permanent disability or death, score 4 or 5 even if that means many reports in
+a row land there. Never lower a score to keep a distribution looking plausible.
+
+(Our own labelled set runs at roughly 59% precursors, because every synthetic report was
+generated centred on a hazard category. An earlier version of this prompt asserted "roughly one
+in five", which is the rate in a realistic report stream but not in this data - and the model was
+penalised for obeying it. See docs/eval-diagnosis.md.)
 
 Two worked examples to calibrate against:
 - A contractor on a ladder loses footing and falls six inches onto a padded floor, spraining a
@@ -274,4 +279,4 @@ def classify(report_text: str) -> dict:
 # Bumped to distinguish predictions made under the g3fix3 severity-calibration
 # examples (short-fall / quick-recovery worked examples added to Gate 3) from
 # earlier g3fix2 predictions - lets the resumable reclassify script tell them apart.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2"
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-nobaserate"
