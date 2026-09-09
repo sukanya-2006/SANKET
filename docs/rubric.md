@@ -438,11 +438,17 @@ document agree 88% of the time, no classifier can honestly claim 95%.
   | all four fields matching exactly | 58.3% |
   | the three gates matching exactly, ignoring `lsr_rule` | 59.4% |
 
-  Note these are computed after `load_gold_labels.py` derives `is_sif_precursor` from the gates
-  instead of reading the annotators' typed column, per §2. That changed the disagreement set in
-  both directions: report 56 stopped being a disagreement, and 51 and 96 became one where a
-  typed value had been masking a genuine Gate 3 split. **Open tiebreaks: 10, 20, 51, 60, 96,
-  139, 149.**
+  These are computed after `is_sif_precursor` is derived from the gates rather than read from
+  the annotators' typed column, per §2. `merge_labels.py` was comparing the typed column, and
+  that had corrupted the gold set in both directions:
+
+  - **Report 56** was held out awaiting a tiebreak it never needed. Both annotators recorded
+    identical gates and one typed the boolean wrongly, so they "disagreed".
+  - **Reports 51 and 96** were written into the gold set with annotator A's row taken as the
+    agreed answer, because a typed value matched while the gates did not. Nobody adjudicated
+    them. They have been withdrawn rather than resolved — picking a winner is adjudication.
+
+  The gold set went from 174 rows to 173. **Open tiebreaks: 10, 20, 51, 60, 96, 139, 149.**
 
   > **STILL TO BE ANSWERED BY MEMBER 1 — the one thing no script can check.**
   > Did akanksha and sukanya each label all 180 reports without seeing the other's file, and

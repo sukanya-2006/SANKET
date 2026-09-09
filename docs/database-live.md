@@ -15,7 +15,7 @@ which is why none of it showed up in 37 passing tests.
 |---|---|
 | `/health` (local) | `database: connected` |
 | `reports` | 180 — 150 synthetic, 30 OSHA |
-| `gold_labels` | 534 — akanksha 180, sukanya 180, agreed 174 |
+| `gold_labels` | 533 — akanksha 180, sukanya 180, agreed 173 |
 | `predictions` | append-only, multiple versions retained |
 | Aggregation SQL | all eight statements execute and return rows |
 | `/aggregate/*` | all six endpoints verified against Postgres |
@@ -218,6 +218,28 @@ That last one changed which reports the annotators disagree on, in both directio
 
 **Open tiebreaks are now 10, 20, 51, 60, 96, 139, 149** — seven, not the six previously
 circulated. Six are Gate 3 at the 3/4 boundary; report 96 is Gate 2, `unclear` against `failed`.
+
+### The merge script was comparing the typed column too
+
+`merge_labels.py` had the same defect, and it produced two opposite errors on the real files.
+
+**Report 56 was held out of the gold set for a tiebreak it never needed.** Both annotators
+recorded identical gates — `yes` / `failed` / severity 4 — and one typed the boolean as
+`False`. Compared on the typed column they "disagreed".
+
+**Reports 51 and 96 went into the gold set without anyone adjudicating them.** One annotator
+typed `True` against her own gates; the other typed `True` from gates that genuinely gave
+`True`. Compared on the typed column they "agreed", so the merge took annotator A's row as
+gold — on two reports where the annotators actually differ, on severity and on
+`control_status` respectively.
+
+Those two rows were a consensus that never happened. They are now withdrawn rather than
+resolved, because picking a winner is adjudication and that is a human's job. `merge_labels.py`
+derives the label before comparing, and `load_gold_labels.py` withdraws rows the source file no
+longer claims — an upsert alone cannot express a retraction, so the database would otherwise
+have kept serving a consensus that exists nowhere on disk.
+
+Net effect on the gold set: **174 rows to 173.** Report 56 in, reports 51 and 96 out.
 
 ### On the two agreement figures in circulation
 

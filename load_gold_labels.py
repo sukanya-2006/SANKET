@@ -231,6 +231,30 @@ def main():
     print("\n" + str(len(all_rows)) + " rows upserted into gold_labels (" +
           str(written) + " affected).")
 
+    # Withdraw rows the source file no longer claims.
+    #
+    # An upsert alone cannot express "this label was retracted", and retraction happens: the
+    # merge used to compare the typed is_sif_precursor column, so two reports where the
+    # annotators actually differ were written into the adjudicated set with annotator A's
+    # answer copied in. Fixing the merge removed them from gold_labels.csv, but the database
+    # would have kept serving them - a consensus that no longer exists anywhere on disk.
+    #
+    # Scoped per annotator, so this only ever removes rows this run was responsible for.
+    for path, annotator in SOURCES:
+        if not os.path.exists(path):
+            continue
+        keep = [r["report_id"] for r in all_rows if r["annotator"] == annotator]
+        if not keep:
+            continue
+        removed = db.execute(
+            "DELETE FROM gold_labels WHERE annotator = %(annotator)s "
+            "AND NOT (report_id = ANY(%(keep)s))",
+            {"annotator": annotator, "keep": keep},
+        )
+        if removed:
+            print("  withdrew " + str(removed) + " stale " + repr(annotator) +
+                  " row(s) no longer present in " + path)
+
     for r in db.query("""
         SELECT annotator,
                count(*)                                      AS n,
