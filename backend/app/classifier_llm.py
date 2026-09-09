@@ -214,7 +214,7 @@ def classify(report_text: str) -> dict:
     to patch things up - that's what the fallback pipeline is for.
     """
     response = None
-    for attempt in range(5):
+    for attempt in range(3):
         try:
             response = _get_client().chat.completions.create(
                 model=MODEL_NAME,
