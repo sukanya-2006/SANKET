@@ -116,11 +116,20 @@ def _rate(precursors: int, total: int) -> float:
     return round(precursors / total, 4) if total else 0.0
 
 
-def _top_rule(rows: list[ReportDetail]) -> str:
-    """Most frequent lsr_rule among a group's precursors."""
+def _top_rule(rows: list[ReportDetail]) -> str | None:
+    """Most frequent lsr_rule among a group's precursors, or None if it has none.
+
+    This returned LSRRule.NONE ("none") for an empty group, which the SQL path does not -
+    `mode() ... FILTER (WHERE is_sif_precursor)` over no precursors returns NULL. The two
+    paths are supposed to be indistinguishable to a caller, and they were not.
+
+    "none" is also a real rule value meaning no Life-Saving Rule applies, so returning it
+    here told the frontend that a site's top precursor rule was "none" when the truth was
+    that the site had no precursors. None says that plainly.
+    """
     rules = [r.lsr_rule.value for r in rows if r.is_sif_precursor and r.lsr_rule]
     if not rules:
-        return LSRRule.NONE.value
+        return None
     return Counter(rules).most_common(1)[0][0]
 
 

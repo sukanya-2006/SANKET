@@ -134,7 +134,13 @@ class SiteAggregate(BaseModel):
     report_count: int
     precursor_count: int
     precursor_rate: float = Field(ge=0.0, le=1.0)
-    top_rule: str
+
+    # Null when the group has no precursors at all - there is no "most common rule among
+    # this site's precursors" if it has none. The SQL says so directly: mode() over an empty
+    # FILTER returns NULL. The stub used to answer "none" here instead, which is a real
+    # LSRRule value meaning "no Life-Saving Rule applies", so a frontend could not tell an
+    # empty group from a genuine finding. Both paths now return null and the UI shows a dash.
+    top_rule: str | None = None
 
 
 class ActivityAggregate(BaseModel):
@@ -142,7 +148,7 @@ class ActivityAggregate(BaseModel):
     report_count: int
     precursor_count: int
     precursor_rate: float = Field(ge=0.0, le=1.0)
-    top_rule: str
+    top_rule: str | None = None  # see SiteAggregate.top_rule
 
 
 class SiteAggregateResponse(BaseModel):

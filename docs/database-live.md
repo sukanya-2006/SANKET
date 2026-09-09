@@ -18,13 +18,14 @@ which is why none of it showed up in 37 passing tests.
 | `gold_labels` | 534 — akanksha 180, sukanya 180, agreed 174 |
 | `predictions` | append-only, multiple versions retained |
 | Aggregation SQL | all eight statements execute and return rows |
+| `/aggregate/*` | all six endpoints verified against Postgres |
 
 The SQL itself was correct. Every statement in `app/sql/aggregates.sql` ran first time and
 returned sensible results. What was broken was everything around it.
 
 ---
 
-## Six bugs, none of which raised an error
+## Seven bugs, six of which raised no error at all
 
 ### 1. The aggregates were empty, and nothing said why
 
@@ -107,6 +108,22 @@ except by a boolean nobody was filtering on.
 It now refuses to store a fallback, and stops after five in a row rather than grinding through
 the rest of the set against the same wall. An unclassified report is recoverable — the next
 run picks it up. A stub row looks like data forever.
+
+### 7. `/aggregate/sites` and `/aggregate/activities` returned 500 on real data
+
+This one did raise. `top_rule` comes from `mode(...) FILTER (WHERE is_sif_precursor)`, which
+returns NULL for a group that has reports but no precursors. The schema declared `top_rule` as
+a required `str`, so every request to those two endpoints failed the moment a site had no
+precursors in it.
+
+The stub never produced that shape, so the tests could not see it. Worse, the stub path
+returned `LSRRule.NONE` — the literal string `"none"` — where the SQL returns NULL. `"none"` is
+a real rule value meaning no Life-Saving Rule applies, so the two paths were giving different
+answers to the same question and the frontend could not have told an empty group from a
+genuine finding.
+
+`top_rule` is now nullable and both paths return null. The whole point of the repository seam
+is that a caller cannot tell which one answered.
 
 ### And the rate limit underneath all of it
 

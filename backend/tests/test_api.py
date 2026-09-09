@@ -608,6 +608,36 @@ def test_every_named_sql_statement_parses():
         assert db.statement(name).strip()
 
 
+def test_top_rule_is_null_for_a_group_with_no_precursors():
+    """A group with no precursors has no top rule, and both paths must say so the same way.
+
+    The SQL says it directly: `mode() ... FILTER (WHERE is_sif_precursor)` over an empty set
+    returns NULL. The stub path returned LSRRule.NONE instead - and "none" is a real rule
+    value meaning no Life-Saving Rule applies, so the frontend could not tell "this site has
+    no precursors" from "this site's precursors are all unclassifiable".
+
+    The schema also declared top_rule as a required str, so the live path 500'd on the first
+    site that had reports but no precursors. Every /aggregate/sites and /aggregate/activities
+    request failed against real data, while the stub - which never produced a NULL - passed.
+    """
+    from app import aggregate
+    from app.schemas import SiteAggregate
+
+    assert aggregate._top_rule([]) is None
+
+    # The schema must accept it rather than rejecting the row the SQL legitimately returns.
+    row = SiteAggregate(site="Terminal C", report_count=2, precursor_count=0,
+                        precursor_rate=0.0, top_rule=None)
+    assert row.top_rule is None
+
+    body = client.get("/aggregate/sites").json()
+    for group in body["ranked"] + body["insufficient_volume"]:
+        if group["precursor_count"] == 0:
+            assert group["top_rule"] is None, (
+                "a group with no precursors must report top_rule null, not a rule name"
+            )
+
+
 def test_aggregates_read_the_version_scoped_view_not_the_global_one():
     """Every aggregate filters on model_version, so it must pick the latest row WITHIN
     that version.
