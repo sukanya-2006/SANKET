@@ -22,9 +22,13 @@ from ..schemas import (
     LSRRule,
     ReportDetail,
     ReportPage,
+    ReportStatus,
     RuleControlBucket,
     ShiftAggregate,
     SiteAggregateResponse,
+    StatusEvent,
+    StatusResponse,
+    StatusUpdateRequest,
     TrendPoint,
 )
 
@@ -91,6 +95,7 @@ def reports(
     lsr_rule: LSRRule | None = None,
     site: str | None = None,
     source: str | None = None,
+    status: ReportStatus | None = None,
     q: str | None = None,
 ) -> ReportPage:
     """Precursors first, then severity descending. The ranked order is the product."""
@@ -101,6 +106,7 @@ def reports(
         lsr_rule=lsr_rule.value if lsr_rule else None,
         site=site,
         source=source,
+        status=status.value if status else None,
         q=q,
     )
     return ReportPage(items=items, total=total, limit=limit, offset=offset)
@@ -112,6 +118,52 @@ def report_detail(report_id: str) -> ReportDetail:
     if found is None:
         raise HTTPException(status_code=404, detail=f"report {report_id} not found")
     return found
+
+
+@router.post("/reports/{report_id}/status", response_model=StatusResponse,
+             tags=["reports"])
+def set_report_status(report_id: str, payload: StatusUpdateRequest) -> StatusResponse:
+    """Record a triage decision: dispatched, archived, or back to active.
+
+    This is the only endpoint in the API where a human changes something. Everything else
+    reads, or asks the model a question. That asymmetry is deliberate - the system ranks a
+    reading queue and never closes a report itself.
+
+    The write is an append, not an update. `GET /reports/{report_id}/status` returns the whole
+    history, so "who archived this and why" survives, which a mutable status column could not
+    answer.
+
+    Check `persisted` in the response. It is false when the API is running without a database,
+    in which case the decision is held in memory and dies with the process. Surface that in the
+    UI rather than showing a success state - a triage decision that silently reverts overnight
+    is the failure this endpoint exists to remove.
+    """
+    if repository.get_report(report_id) is None:
+        raise HTTPException(status_code=404, detail=f"report {report_id} not found")
+
+    result = repository.set_status(
+        report_id=report_id,
+        status=payload.status,
+        note=payload.note,
+        actor=payload.actor,
+    )
+    if not result.persisted:
+        log.warning("report %s marked %s in memory only - no database configured",
+                    report_id, payload.status.value)
+    return result
+
+
+@router.get("/reports/{report_id}/status", response_model=list[StatusEvent],
+            tags=["reports"])
+def get_report_status_history(report_id: str) -> list[StatusEvent]:
+    """Every triage decision made on this report, newest first.
+
+    Empty means nobody has acted on it yet, which is what `status: active` means everywhere
+    else. Absence of a decision is not a decision.
+    """
+    if repository.get_report(report_id) is None:
+        raise HTTPException(status_code=404, detail=f"report {report_id} not found")
+    return repository.status_history(report_id)
 
 
 # ---------------------------------------------------------------------------

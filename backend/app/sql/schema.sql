@@ -1,6 +1,7 @@
 -- Supabase schema — TECH_STACK v2 §Database. Column names are NAMES.md verbatim.
 --
--- Four tables: sites, reports, predictions (append-only), gold_labels. No pgvector, no
+-- Five tables: sites, reports, predictions (append-only), gold_labels,
+-- report_status_events (append-only). No pgvector, no
 -- embeddings, no clustering — the aggregation in sql/aggregates.sql does the same dashboard
 -- job with GROUP BY, and every member can explain it.
 --
@@ -103,6 +104,48 @@ CREATE INDEX IF NOT EXISTS predictions_model_version_idx
 
 
 -- ---------------------------------------------------------------------------
+-- report_status_events — APPEND-ONLY, like predictions. One row per triage
+-- decision a human makes: dispatched to a crew, archived as reviewed, or moved
+-- back to active. The current status is the newest row, not a mutable column.
+--
+-- Append-only matters more here than anywhere else in the schema. The whole
+-- claim of this system is that it never closes a report - it reorders a reading
+-- queue and a person decides. "Who archived this, when, and why" is the first
+-- question asked when something later goes wrong, and a status column that is
+-- overwritten in place cannot answer it. This can.
+--
+-- `actor` is free text rather than a foreign key: there is no user table in a
+-- prototype, and recording "sanket" is worth more than recording nothing while
+-- waiting for auth. It is not an identity claim and must not be presented as one.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS report_status_events (
+    id          bigserial PRIMARY KEY,
+    report_id   text NOT NULL REFERENCES reports (report_id) ON DELETE CASCADE,
+    status      text NOT NULL CHECK (status IN ('active', 'dispatched', 'archived')),
+    note        text,
+    actor       text,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS report_status_events_latest_idx
+    ON report_status_events (report_id, created_at DESC);
+
+
+-- One row per report: its current triage status. A report nobody has touched has
+-- no row here at all, and reads default it to 'active' - absence of a decision is
+-- not a decision, and writing 180 'active' rows up front would say otherwise.
+CREATE OR REPLACE VIEW latest_report_status AS
+SELECT DISTINCT ON (report_id)
+       report_id,
+       status,
+       note,
+       actor,
+       created_at AS status_changed_at
+FROM report_status_events
+ORDER BY report_id, created_at DESC;
+
+
+-- ---------------------------------------------------------------------------
 -- gold_labels — human labels. Two independent annotators plus a tiebreak row.
 -- gate_split records WHICH gate the annotators disagreed on, which is the whole
 -- diagnostic when agreement lands under 70%: it tells us which gate to revise
@@ -151,6 +194,7 @@ ALTER TABLE sites       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gold_labels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_status_events ENABLE ROW LEVEL SECURITY;
 
 
 -- ---------------------------------------------------------------------------

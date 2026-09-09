@@ -45,6 +45,23 @@ class LSRRule(str, Enum):
     NONE = "none"
 
 
+class ReportStatus(str, Enum):
+    """Where a report sits in the human triage queue. Not a model output.
+
+    The classifier never sets this and never reads it. It ranks a reading queue; a person
+    decides what to do about an entry. Keeping the two apart is the difference between
+    "the system flagged this" and "the system closed this", and only one of those is a
+    claim we are willing to make.
+
+    `active` is the absence of a decision, which is why it is the default and why a report
+    nobody has touched has no row in report_status_events at all.
+    """
+
+    ACTIVE = "active"
+    DISPATCHED = "dispatched"
+    ARCHIVED = "archived"
+
+
 class ClassificationResult(BaseModel):
     """Master plan §5. `recommended_check` added by backend patch v1.1 Amendment B."""
 
@@ -98,6 +115,11 @@ class ReportSummary(BaseModel):
     control_status: ControlStatus | None = None
     confidence: float | None = None
 
+    # Human triage state. Defaults to active because a report nobody has acted on has no
+    # status row, and the queue must render identically whether or not anyone has started.
+    status: ReportStatus = ReportStatus.ACTIVE
+    status_changed_at: datetime | None = None
+
 
 class ReportDetail(ReportSummary):
     created_at: datetime
@@ -111,6 +133,46 @@ class ReportPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class StatusUpdateRequest(BaseModel):
+    """Body of POST /reports/{report_id}/status."""
+
+    status: ReportStatus
+
+    # Why, in the operator's words. Optional, but it is the field that makes the audit
+    # trail worth having - "archived" alone tells a reviewer nothing six weeks later.
+    note: str | None = Field(default=None, max_length=2000)
+
+    # Who did it. Free text, because there is no auth in a prototype and recording a name
+    # someone typed beats recording nothing. It is NOT an identity claim and nothing
+    # downstream should treat it as one.
+    actor: str | None = Field(default=None, max_length=120)
+
+
+class StatusEvent(BaseModel):
+    """One triage decision, as stored. The table is append-only, so these accumulate."""
+
+    report_id: str
+    status: ReportStatus
+    note: str | None = None
+    actor: str | None = None
+    created_at: datetime
+
+
+class StatusResponse(BaseModel):
+    """What POST /reports/{report_id}/status returns.
+
+    `persisted` is false when the API is running without a database, in which case the
+    change is held in memory and dies with the process. The frontend needs to be able to
+    tell, because a triage decision that silently evaporates on restart is exactly the
+    failure this endpoint exists to remove.
+    """
+
+    report_id: str
+    status: ReportStatus
+    status_changed_at: datetime
+    persisted: bool
 
 
 # ---------------------------------------------------------------------------

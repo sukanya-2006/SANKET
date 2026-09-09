@@ -684,6 +684,109 @@ def test_batch_classify_skips_only_the_current_model_version():
     assert 'classifier.active_versions()["primary"]' in source
 
 
+def _first_report_id():
+    return client.get("/reports", params={"limit": 1}).json()["items"][0]["report_id"]
+
+
+def test_reports_default_to_active_with_no_status_row():
+    """Absence of a decision is not a decision.
+
+    A report nobody has triaged has no row in report_status_events, and both the SQL path and
+    the stub default it to active. Writing 180 'active' rows up front would claim someone had
+    looked at all of them.
+    """
+    items = client.get("/reports", params={"limit": 5}).json()["items"]
+    assert items
+    assert all(i["status"] == "active" for i in items)
+    assert all(i["status_changed_at"] is None for i in items)
+
+
+def test_triage_decision_survives_a_later_read():
+    """The whole point: dispatch it, read it back, and it is still dispatched.
+
+    The admin dashboard held dispatchedIds in React state, so every triage decision reverted
+    on refresh. Persisting it is what makes the queue usable past one session.
+    """
+    from app import repository
+
+    repository._stub_status.clear()
+    report_id = _first_report_id()
+
+    posted = client.post(
+        f"/reports/{report_id}/status",
+        json={"status": "dispatched", "note": "crew sent", "actor": "sanket"},
+    )
+    assert posted.status_code == 200
+    body = posted.json()
+    assert body["status"] == "dispatched"
+    assert body["report_id"] == report_id
+
+    detail = client.get(f"/reports/{report_id}").json()
+    assert detail["status"] == "dispatched"
+    assert detail["status_changed_at"] is not None
+
+    listed = client.get("/reports", params={"status": "dispatched", "limit": 50}).json()
+    assert report_id in [i["report_id"] for i in listed["items"]]
+
+    repository._stub_status.clear()
+
+
+def test_status_response_admits_when_it_did_not_persist():
+    """Without a database the decision is held in memory, and the response must say so.
+
+    A UI that shows a confident success state for a change that dies with the process is worse
+    than one that refuses the change - the operator finds out tomorrow, from someone else.
+    """
+    from app import repository
+
+    repository._stub_status.clear()
+    report_id = _first_report_id()
+
+    body = client.post(f"/reports/{report_id}/status", json={"status": "archived"}).json()
+    assert body["persisted"] is False, (
+        "the tests run with no database, so persisted must be false"
+    )
+
+    repository._stub_status.clear()
+
+
+def test_status_history_is_append_only():
+    """Every decision stays on the record, newest first.
+
+    'Who archived this, when, and why' is the first question asked when something later goes
+    wrong. A status column updated in place cannot answer it, which is why this is a table.
+    """
+    from app import repository
+
+    repository._stub_status.clear()
+    report_id = _first_report_id()
+
+    assert client.get(f"/reports/{report_id}/status").json() == []
+
+    client.post(f"/reports/{report_id}/status",
+                json={"status": "dispatched", "actor": "sanket"})
+    history = client.get(f"/reports/{report_id}/status").json()
+    assert len(history) == 1
+    assert history[0]["status"] == "dispatched"
+    assert history[0]["actor"] == "sanket"
+
+    repository._stub_status.clear()
+
+
+def test_status_rejects_a_value_outside_the_vocabulary():
+    """Same discipline as every other enum here: no free-text status values."""
+    report_id = _first_report_id()
+    bad = client.post(f"/reports/{report_id}/status", json={"status": "closed"})
+    assert bad.status_code == 422
+
+
+def test_status_on_an_unknown_report_is_404_not_a_silent_write():
+    """A typo'd id must fail loudly rather than recording a decision about nothing."""
+    assert client.post("/reports/no-such-report/status",
+                       json={"status": "archived"}).status_code == 404
+    assert client.get("/reports/no-such-report/status").status_code == 404
+
+
 def test_queue_puts_precursors_first_then_severity():
     """The ranked order is the product, so it lives in the API, not in the client."""
     items = client.get("/reports", params={"limit": 40}).json()["items"]
