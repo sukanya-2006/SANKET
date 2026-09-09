@@ -12,6 +12,7 @@ from . import classifier, db
 from .api.routes import router
 from .config import get_settings
 
+
 settings = get_settings()
 
 app = FastAPI(
@@ -47,6 +48,8 @@ log = logging.getLogger(__name__)
 
 try:
     from . import classifier_llm
+    from .api import transcribe
+    app.include_router(transcribe.router)
 
     classifier.register_primary(classifier_llm.classify)
 except Exception as exc:  # noqa: BLE001
