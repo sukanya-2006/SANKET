@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { ShieldAlert, ArrowLeft, RefreshCw, X, AlertTriangle, CheckCircle2, ArchiveRestore, Clock } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, RefreshCw, X, AlertTriangle, CheckCircle2, Archive, Clock, Truck } from 'lucide-react';
 
-// Helper to format timestamps cleanly for the dashboard
 const formatDateTime = (dateString) => {
   if (!dateString) return 'Just now';
   const d = new Date(dateString);
@@ -22,27 +21,24 @@ export default function AdminTriage() {
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
   const [actionTaken, setActionTaken] = useState(false);
-  const [activeTab, setActiveTab] = useState('active'); 
-  const [resolvedIds, setResolvedIds] = useState([]);
+  
+  // 3-Tab System State
+  const [activeTab, setActiveTab] = useState('active'); // 'active', 'dispatched', or 'archived'
+  const [dispatchedIds, setDispatchedIds] = useState([]);
+  const [archivedIds, setArchivedIds] = useState([]);
 
   const fetchReports = async (currentOffset = 0) => {
     setLoading(true);
     try {
-      // We still pull a healthy batch, but now the math handles the layout perfectly
       const data = await api.getReports(100, currentOffset);
       const items = Array.isArray(data) ? data : data.items || [];
       
-      // THE PERMANENT FIX: Compound Sorting (Severity DESC, then Date DESC)
       const sortedReports = items.sort((a, b) => {
         const scoreA = a.severity_score || a.severity || 0;
         const scoreB = b.severity_score || b.severity || 0;
         
-        // 1. Sort by Severity First
-        if (scoreB !== scoreA) {
-          return scoreB - scoreA;
-        }
+        if (scoreB !== scoreA) return scoreB - scoreA;
         
-        // 2. If Severity is a tie, Sort by Newest Date First
         const dateA = new Date(a.created_at || a.timestamp || 0).getTime();
         const dateB = new Date(b.created_at || b.timestamp || 0).getTime();
         return dateB - dateA;
@@ -60,13 +56,19 @@ export default function AdminTriage() {
     fetchReports(0);
   }, []);
 
-  const handleDispatch = () => {
+  const handleAction = () => {
     setActionTaken(true);
     setTimeout(() => {
       const uniqueId = selectedReport.id || selectedReport.report_text;
-      if (!resolvedIds.includes(uniqueId)) {
-        setResolvedIds([...resolvedIds, uniqueId]);
+      const isPrecursor = selectedReport.is_sif_precursor || selectedReport.is_sif;
+      
+      // Route to the correct array based on SIF status
+      if (isPrecursor) {
+        if (!dispatchedIds.includes(uniqueId)) setDispatchedIds([...dispatchedIds, uniqueId]);
+      } else {
+        if (!archivedIds.includes(uniqueId)) setArchivedIds([...archivedIds, uniqueId]);
       }
+      
       setSelectedReport(null);
       setActionTaken(false);
     }, 1000);
@@ -74,8 +76,13 @@ export default function AdminTriage() {
 
   const displayedReports = reports.filter((report) => {
     const uniqueId = report.id || report.report_text;
-    const isResolved = resolvedIds.includes(uniqueId);
-    return activeTab === 'active' ? !isResolved : isResolved;
+    const isDispatched = dispatchedIds.includes(uniqueId);
+    const isArchived = archivedIds.includes(uniqueId);
+    
+    if (activeTab === 'active') return !isDispatched && !isArchived;
+    if (activeTab === 'dispatched') return isDispatched;
+    if (activeTab === 'archived') return isArchived;
+    return false;
   });
 
   return (
@@ -104,6 +111,7 @@ export default function AdminTriage() {
             <p className="text-xs text-slate-500">Sorted by Severity, then by Newest.</p>
           </div>
           
+          {/* 3-Tab Switcher */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => setActiveTab('active')}
@@ -112,10 +120,16 @@ export default function AdminTriage() {
               Active Alerts
             </button>
             <button
-              onClick={() => setActiveTab('resolved')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${activeTab === 'resolved' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => setActiveTab('dispatched')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dispatched' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              <ArchiveRestore className="w-4 h-4" /> Dispatched
+              <Truck className="w-4 h-4" /> Dispatched
+            </button>
+            <button
+              onClick={() => setActiveTab('archived')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${activeTab === 'archived' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <Archive className="w-4 h-4" /> Archived
             </button>
           </div>
         </div>
@@ -134,7 +148,11 @@ export default function AdminTriage() {
               {loading && displayedReports.length === 0 ? (
                 <tr><td colSpan="4" className="py-12 text-center text-slate-400">Loading live data...</td></tr>
               ) : displayedReports.length === 0 ? (
-                <tr><td colSpan="4" className="py-12 text-center text-slate-500 font-medium">{activeTab === 'active' ? '🎉 No active hazards! Queue is clear.' : 'No reports have been dispatched yet.'}</td></tr>
+                <tr><td colSpan="4" className="py-12 text-center text-slate-500 font-medium">
+                  {activeTab === 'active' && '🎉 No active hazards! Queue is clear.'}
+                  {activeTab === 'dispatched' && 'No teams have been dispatched yet.'}
+                  {activeTab === 'archived' && 'No routine reports have been archived yet.'}
+                </td></tr>
               ) : (
                 displayedReports.map((report, idx) => {
                   const isPrecursor = report.is_sif_precursor || report.is_sif;
@@ -159,8 +177,10 @@ export default function AdminTriage() {
                         </span>
                       </td>
                       <td className="py-4 px-6">
-                        {activeTab === 'resolved' ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3.5 h-3.5" /> Dispatched</span>
+                        {activeTab === 'dispatched' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700"><Truck className="w-3.5 h-3.5" /> Dispatched</span>
+                        ) : activeTab === 'archived' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-700"><Archive className="w-3.5 h-3.5" /> Archived</span>
                         ) : isPrecursor ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500 text-white shadow-sm"><ShieldAlert className="w-3.5 h-3.5" /> SIF Precursor</span>
                         ) : (
@@ -185,7 +205,9 @@ export default function AdminTriage() {
             </button>
             
             <h2 className="text-2xl font-bold text-[#2f3e46] mb-2 flex items-center gap-2">
-              {activeTab === 'resolved' ? <><CheckCircle2 className="w-6 h-6 text-emerald-500" /> Dispatched Incident Log</> : <><AlertTriangle className="w-6 h-6 text-amber-500" /> Incident Analysis Report</>}
+              {activeTab === 'dispatched' && <><Truck className="w-6 h-6 text-blue-500" /> Dispatched Incident Log</>}
+              {activeTab === 'archived' && <><Archive className="w-6 h-6 text-slate-500" /> Archived Incident Log</>}
+              {activeTab === 'active' && <><AlertTriangle className="w-6 h-6 text-amber-500" /> Incident Analysis Report</>}
             </h2>
             <p className="text-sm text-slate-500 font-medium mb-6 flex items-center gap-2">
                <Clock className="w-4 h-4" /> Reported on {formatDateTime(selectedReport.created_at || selectedReport.timestamp)}
@@ -220,11 +242,23 @@ export default function AdminTriage() {
               {activeTab === 'active' && (
                 <div className="pt-4 border-t border-slate-100 flex justify-end">
                   <button
-                    onClick={handleDispatch}
+                    onClick={handleAction}
                     disabled={actionTaken}
-                    className={`px-6 py-3 rounded-xl font-bold text-white transition-all flex items-center gap-2 ${actionTaken ? 'bg-emerald-500 scale-95' : 'bg-[#354f52] hover:bg-[#2f3e46] hover:shadow-lg'}`}
+                    className={`px-6 py-3 rounded-xl font-bold text-white transition-all flex items-center gap-2 ${
+                      actionTaken 
+                        ? 'bg-emerald-500 scale-95' 
+                        : (selectedReport.is_sif_precursor || selectedReport.is_sif)
+                          ? 'bg-rose-600 hover:bg-rose-700 hover:shadow-lg' 
+                          : 'bg-[#354f52] hover:bg-[#2f3e46] hover:shadow-lg' 
+                    }`}
                   >
-                    {actionTaken ? <><CheckCircle2 className="w-5 h-5" /> Dispatched!</> : 'Acknowledge & Dispatch Team'}
+                    {actionTaken ? (
+                      <><CheckCircle2 className="w-5 h-5" /> Cleared from Queue!</>
+                    ) : (selectedReport.is_sif_precursor || selectedReport.is_sif) ? (
+                      'Acknowledge & Dispatch Team'
+                    ) : (
+                      'Mark as Reviewed & Archive'
+                    )}
                   </button>
                 </div>
               )}
