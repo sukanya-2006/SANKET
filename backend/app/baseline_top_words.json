@@ -1,0 +1,126 @@
+{
+  "top_positive": [
+    {
+      "word": "valve",
+      "weight": 0.9487
+    },
+    {
+      "word": "truck",
+      "weight": 0.613
+    },
+    {
+      "word": "isolation",
+      "weight": 0.6009
+    },
+    {
+      "word": "pressure",
+      "weight": 0.4795
+    },
+    {
+      "word": "missing",
+      "weight": 0.4126
+    },
+    {
+      "word": "burst",
+      "weight": 0.4071
+    },
+    {
+      "word": "close",
+      "weight": 0.4
+    },
+    {
+      "word": "entered",
+      "weight": 0.3991
+    },
+    {
+      "word": "air",
+      "weight": 0.3983
+    },
+    {
+      "word": "hatch",
+      "weight": 0.396
+    },
+    {
+      "word": "pump",
+      "weight": 0.3719
+    },
+    {
+      "word": "oxygen",
+      "weight": 0.3612
+    },
+    {
+      "word": "crane",
+      "weight": 0.3472
+    },
+    {
+      "word": "work",
+      "weight": 0.3348
+    },
+    {
+      "word": "noticed faint",
+      "weight": 0.3334
+    }
+  ],
+  "top_negative": [
+    {
+      "word": "spill",
+      "weight": -0.9657
+    },
+    {
+      "word": "slipped",
+      "weight": -0.8171
+    },
+    {
+      "word": "patch",
+      "weight": -0.6425
+    },
+    {
+      "word": "employee slipped",
+      "weight": -0.6368
+    },
+    {
+      "word": "fall",
+      "weight": -0.6352
+    },
+    {
+      "word": "container",
+      "weight": -0.6229
+    },
+    {
+      "word": "floor",
+      "weight": -0.604
+    },
+    {
+      "word": "wet",
+      "weight": -0.5443
+    },
+    {
+      "word": "cable",
+      "weight": -0.4939
+    },
+    {
+      "word": "wet patch",
+      "weight": -0.4907
+    },
+    {
+      "word": "guard",
+      "weight": -0.4727
+    },
+    {
+      "word": "lost",
+      "weight": -0.3896
+    },
+    {
+      "word": "slipped wet",
+      "weight": -0.3783
+    },
+    {
+      "word": "hat",
+      "weight": -0.3729
+    },
+    {
+      "word": "footing",
+      "weight": -0.3695
+    }
+  ]
+}
