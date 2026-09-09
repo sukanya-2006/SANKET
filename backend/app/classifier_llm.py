@@ -26,6 +26,13 @@ load_dotenv()
 
 MODEL_NAME = "openai/gpt-oss-20b"  # same free-tier model already in use elsewhere
 
+# Retry budget for a rate-limited call. The free tier's token bucket refills on roughly a
+# 25-second cycle for a prompt this size, so the waits step past one full window and then
+# two. Three attempts spanning ~75 seconds is the point where retrying harder stops helping
+# and the caller should slow down instead.
+RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (30, 45)
+
 # Built on first use, not at import. Constructing this at import time meant a missing
 # GROQ_API_KEY took down the entire API — no /health, no /reports, no dashboard — which is
 # the opposite of the degraded mode this classifier is supposed to sit behind.
@@ -235,11 +242,30 @@ def classify(report_text: str) -> dict:
             break
         except Exception as exc:
             err_str = str(exc).lower()
-            if ("429" in err_str or "rate_limit" in err_str or "connection" in err_str or "socket" in err_str or "unreachable" in err_str) and attempt < 4:
+            retryable = ("429" in err_str or "rate_limit" in err_str or "connection" in err_str
+                         or "socket" in err_str or "unreachable" in err_str)
+            if retryable and attempt < RETRY_ATTEMPTS - 1:
                 import time
-                time.sleep(3.0 * (attempt + 1))
+
+                # Groq's free tier caps TOKENS per minute, not requests, and this system
+                # prompt is ~3,000 tokens. At an 8,000 TPM ceiling the bucket refills
+                # roughly every 25 seconds, so the old 3/6/9 second backoff gave up well
+                # before the limit cleared. Wait past a full refill window instead.
+                time.sleep(RETRY_BACKOFF_SECONDS[attempt])
                 continue
             raise
+
+    if response is None:
+        # Every attempt was retryable and every attempt failed. Without this the loop
+        # falls through to `response.choices` and dies with
+        # "'NoneType' object has no attribute 'choices'" - which classifier.py catches
+        # and reports as a generic fallback, hiding the fact that we were rate-limited.
+        raise RuntimeError(
+            "Groq rate limit not cleared after %d attempts (waited %ds total). The free "
+            "tier caps tokens per minute and this prompt is large - space calls further "
+            "apart rather than retrying harder."
+            % (RETRY_ATTEMPTS, sum(RETRY_BACKOFF_SECONDS))
+        )
 
     raw_content = response.choices[0].message.content
 

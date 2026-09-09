@@ -8,7 +8,14 @@ python-dotenv==1.0.1
 psycopg[binary]==3.2.3
 
 # Classifiers.
-groq==0.13.0
+#
+# groq must be >= 1.x. classifier_llm.py passes `reasoning_effort` to
+# chat.completions.create, which the 0.13 client does not accept - and the
+# failure is invisible: classifier.py catches the TypeError, the baseline stub
+# answers instead, and every prediction comes back is_fallback=True with no
+# error surfaced to the caller. A clean install off the old pin produced a
+# working API that never once called the model.
+groq>=1.7.0
 scikit-learn==1.6.0
 pandas==2.2.3
 

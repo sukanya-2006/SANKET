@@ -8,14 +8,15 @@ finished before the models existed, and the reason swapping them in costs one fu
 
 The pipeline, in order:
 
-    cache hit? ──yes──> return it, is_fallback preserved from when it was stored
+    cache hit? ──yes──> return it (only real answers are ever stored)
         │no
         ├─ primary classifier, with a hard timeout
         │     ├─ returns valid ClassificationResult ─> cache + return
         │     ├─ returns something Pydantic rejects  ─> retry ONCE
         │     │        └─ rejected again ────────────> baseline, is_fallback=True
         │     └─ raises / times out ─────────────────> baseline, is_fallback=True
-        └─ baseline answer is cached too, so a demo that fell back stays consistent
+        └─ baseline answers are NOT cached: a degraded answer must never become
+           permanent, and the cache has no expiry
 
 Two things this buys us for free, both of which are answers to hostile questions:
 
@@ -213,7 +214,23 @@ def classify(report_text: str, *, use_cache: bool = True) -> Outcome:
             log.error("baseline classifier failed: %s: %s", type(exc).__name__, exc)
             raise ClassificationUnavailable(str(exc)) from exc
 
-    if use_cache:
+    if use_cache and not is_fallback:
+        # Never cache a degraded answer.
+        #
+        # This used to cache the baseline result too, so that "a demo that fell back stays
+        # consistent". The cost of that consistency is that it is permanent: the cache has
+        # no TTL, so one bad minute from the model pins the stub answer to that report
+        # forever, on every future call, including from the deployed API. There is no path
+        # back except deleting the row by hand.
+        #
+        # It is not theoretical. A run against a groq client that could not call the model
+        # at all wrote 56 stub answers into the cache under the current prompt version.
+        # Every one of those reports then returned the stub instantly, with no error, no
+        # log line and no network call - which is also why the failure was so hard to see:
+        # calling the classifier directly worked, and calling it through the cache did not.
+        #
+        # A fallback that is recomputed next time and succeeds is not an inconsistency. It
+        # is the system recovering, which is what degraded mode is supposed to allow.
         cache.put(report_text, result, model_version)
 
     return Outcome(

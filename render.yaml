@@ -1,6 +1,8 @@
 # Render deployment — Member 6.
 # The API is stateless apart from the SQLite cache, which lives on the instance disk and is
 # rebuilt on demand, so a free-tier restart costs nothing but a cold cache.
+#
+# Live service: https://sanket-backend-put3.onrender.com
 services:
   - type: web
     name: sif-detector-api
@@ -13,10 +15,42 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
-      # Set these in the Render dashboard, never in this file.
+
+      # ---------------------------------------------------------------------
+      # Secrets. sync: false means Render prompts for the value and stores it
+      # in the dashboard. Never write one into this file - it is in the repo,
+      # and judges read repos.
+      # ---------------------------------------------------------------------
+
+      # Without this the API still answers, but /health reports
+      # database: not_configured and every /aggregate/* endpoint serves the
+      # seeded stub instead of real data. That is the difference between the
+      # deployed dashboard showing 180 classified reports and showing a fixture.
       - key: SUPABASE_DB_URL
         sync: false
-      - key: ANTHROPIC_API_KEY
+
+      # GROQ, not ANTHROPIC. This said ANTHROPIC_API_KEY, which no code reads -
+      # classifier_llm.py builds a groq.Groq() client and looks for GROQ_API_KEY.
+      # A deploy set up from this file alone would have run the baseline stub for
+      # every request while reporting itself healthy.
+      - key: GROQ_API_KEY
         sync: false
+
       - key: CORS_ORIGINS
         sync: false
+
+      # ---------------------------------------------------------------------
+      # Non-secret, but they belong here so a redeploy cannot silently change
+      # what the classifier does.
+      # ---------------------------------------------------------------------
+
+      # Part of the cache key. If this drifts from the prompt in the code, the
+      # instance serves answers produced by a prompt we are no longer shipping.
+      - key: PROMPT_VERSION
+        value: "v4"
+
+      # The free tier is slower than a laptop and gpt-oss-20b occasionally needs
+      # well over ten seconds under load. A premature timeout does not fail - it
+      # quietly discards a good answer and returns the much weaker stub.
+      - key: LLM_TIMEOUT_SECONDS
+        value: "60"

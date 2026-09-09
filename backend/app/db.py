@@ -118,10 +118,11 @@ def executemany(sql: str, rows: list[dict[str, Any]]) -> int:
 
 
 def apply_schema() -> None:
-    """Create the tables and the latest_predictions view. Idempotent — safe to re-run."""
+    """Create the tables and both prediction views. Idempotent — safe to re-run."""
     with connection() as conn, conn.cursor() as cur:
         cur.execute(SCHEMA_SQL.read_text(encoding="utf-8"))
         cur.execute(statement("latest_predictions"))
+        cur.execute(statement("latest_predictions_by_version"))
     log.info("schema applied")
 
 

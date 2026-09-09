@@ -8,6 +8,7 @@ All ten are real. The cache, retry and fallback tests drive the actual machinery
 app/classifier.py by registering deliberately broken classifiers; nothing here is faked.
 """
 
+import pathlib
 import pytest
 from fastapi.testclient import TestClient
 
@@ -227,6 +228,53 @@ def test_both_classifiers_down_returns_503_not_a_guess(swap_classifiers):
     swap_classifiers(primary=broken, baseline=also_broken)
 
     assert client.post("/analyze", json={"report_text": PRECURSOR_TEXT}).status_code == 503
+
+
+def test_a_fallback_answer_is_never_cached(swap_classifiers):
+    """A degraded answer must not become permanent.
+
+    The cache has no expiry, so caching a baseline answer pins it to that report forever -
+    every later call returns the stub instantly, with no error, no log line and no network
+    call. One bad minute from the model becomes a permanent silent downgrade, and there is no
+    way back except deleting the row by hand.
+
+    This is what happened: a run against a groq client that could not call the model wrote 56
+    stub answers into the cache under the live prompt version. It was hard to see precisely
+    because the cache hides it - calling the classifier directly worked and calling it through
+    the cache did not.
+    """
+    from app import cache, classifier
+
+    def broken(text):
+        raise ConnectionError("API unreachable")
+
+    broken.version = "claude-test"
+    swap_classifiers(primary=broken, baseline=_baseline_stub())
+
+    first = classifier.classify(PRECURSOR_TEXT)
+    assert first.is_fallback is True
+    assert cache.get(PRECURSOR_TEXT) is None, "a baseline answer must not be cached"
+
+    # The model comes back. The report must be re-answered, not served the stored stub.
+    def working(text):
+        return {
+            "hazard_assessment": "yes",
+            "lsr_rule": "confined_space",
+            "control_status": "absent",
+            "severity": 5,
+            "is_sif_precursor": True,
+            "confidence": 0.9,
+            "flagged_phrases": ["no gas test"],
+            "reasoning": "recovered",
+        }
+
+    working.version = "claude-test"
+    swap_classifiers(primary=working, baseline=_baseline_stub())
+
+    second = classifier.classify(PRECURSOR_TEXT)
+    assert second.is_fallback is False, "recovery must not be blocked by a cached fallback"
+    assert second.model_version == "claude-test"
+    assert cache.get(PRECURSOR_TEXT) is not None, "a real answer should still be cached"
 
 
 def test_repeat_report_text_hits_the_cache(swap_classifiers):
@@ -552,11 +600,58 @@ def test_every_named_sql_statement_parses():
 
     names = set(db.named_statements())
     assert {
-        "latest_predictions", "summary", "sites_ranked", "sites_insufficient_volume",
+        "latest_predictions", "latest_predictions_by_version",
+        "summary", "sites_ranked", "sites_insufficient_volume",
         "activities_ranked", "activities_insufficient_volume", "rules", "shifts", "trend",
     } <= names
     for name in names:
         assert db.statement(name).strip()
+
+
+def test_aggregates_read_the_version_scoped_view_not_the_global_one():
+    """Every aggregate filters on model_version, so it must pick the latest row WITHIN
+    that version.
+
+    `latest_predictions` picks the newest prediction per report across all versions. Joining
+    that and then filtering by version drops any report whose newest row belongs to a
+    different version - it is never re-resolved to its own row for the version asked for. It
+    fails silently: no error, just fewer rows in the ranking.
+
+    That happened. A classifier run that fell back to the baseline wrote 55 stub rows, which
+    became the newest rows for 55 reports and would have removed all of them from the site
+    and activity rankings. `latest_predictions_by_version` partitions by version first.
+
+    `latest_predictions` is still correct for repository.py, which wants the current view of
+    a report regardless of version, so both exist and this test pins which reads which.
+    """
+    from app import db
+
+    for name in ("summary", "sites_ranked", "sites_insufficient_volume", "activities_ranked",
+                 "activities_insufficient_volume", "rules", "shifts", "trend"):
+        sql = db.statement(name)
+        assert "latest_predictions_by_version" in sql, (
+            "%s must join the version-scoped view" % name
+        )
+        assert "JOIN latest_predictions " not in sql, (
+            "%s joins the global-latest view; reports classified under another version "
+            "will vanish from it without an error" % name
+        )
+
+
+def test_batch_classify_skips_only_the_current_model_version():
+    """After a prompt change, re-running the batch must actually re-classify.
+
+    The skip query used to be `SELECT DISTINCT report_id FROM predictions`, which treats a
+    report classified under any past version as done. Bump the prompt and the script reports
+    "nothing to do" while the database still holds answers from the old prompt - and because
+    the aggregates filter on the current version, every dashboard endpoint returns zero rows
+    with nothing anywhere to explain why.
+    """
+    source = (pathlib.Path(__file__).resolve().parents[2] / "batch_classify.py").read_text(
+        encoding="utf-8"
+    )
+    assert "WHERE model_version = %(model_version)s" in source
+    assert 'classifier.active_versions()["primary"]' in source
 
 
 def test_queue_puts_precursors_first_then_severity():
