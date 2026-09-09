@@ -82,6 +82,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # tier; check x-ratelimit-limit-tokens on any response before lowering it.
 DEFAULT_PACING_SECONDS = 25.0
 
+# Per-report deadline for a batch run. Must exceed classifier_llm's retry budget
+# (RETRY_BACKOFF_SECONDS, 30 + 45) or a rate-limited call is killed mid-backoff and can never
+# recover. The API's own LLM_TIMEOUT_SECONDS stays where it is - see main().
+BATCH_TIMEOUT_SECONDS = 120.0
+
 # Version-aware on purpose. The original form was `SELECT DISTINCT report_id FROM
 # predictions`, which skipped any report that had EVER been classified - so after a prompt
 # change this script reported "nothing to do" while the database still held answers from the
@@ -109,7 +114,23 @@ def main():
                     help="stop after this many reports; useful for a costed trial run")
     ap.add_argument("--allow-fallback", action="store_true",
                     help="store baseline answers too. Off by default - see below.")
+    ap.add_argument("--timeout", type=float, default=BATCH_TIMEOUT_SECONDS,
+                    help="per-report deadline in seconds (default %(default)s)")
     args = ap.parse_args()
+
+    # A batch run has nobody waiting on it, so it should not inherit the API's deadline.
+    #
+    # LLM_TIMEOUT_SECONDS exists to stop a wedged call holding a live request - and a demo -
+    # hostage, which is why it is 60s. But classifier_llm retries a rate-limited call with a
+    # 30s then 45s backoff, and 75s of backoff under a 60s deadline means the wrapper kills
+    # every rate-limited call mid-wait. The report can then never succeed however many times
+    # it is retried.
+    #
+    # Here the honest trade is the opposite way round: wait long enough for the token bucket
+    # to refill, because a slow report is better than an unclassified one. The live API keeps
+    # its own shorter deadline.
+    settings = get_settings()
+    object.__setattr__(settings, "llm_timeout_seconds", args.timeout)
 
     if not db.is_live():
         sys.exit("[!] Database not connected. Check backend/.env and /health first.")
@@ -139,8 +160,8 @@ def main():
         print(f"--limit {args.limit}: classifying {len(todo)} of them this run.\n")
 
     eta = len(todo) * args.delay / 60
-    print(f"Pacing {args.delay:g}s between calls - about {eta:.0f} minutes. "
-          f"Safe to interrupt; re-running resumes.\n")
+    print(f"Pacing {args.delay:g}s between calls, {args.timeout:g}s deadline per report - "
+          f"about {eta:.0f} minutes. Safe to interrupt; re-running resumes.\n")
 
     succeeded = 0
     failed = 0

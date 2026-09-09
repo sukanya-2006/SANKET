@@ -52,10 +52,14 @@ python agreement.py            # the inter-annotator ceiling
 `/health` tells you which mode you are in: `data_source` is either `postgres` or
 `seeded_stub`.
 
-**`batch_classify.py` takes about 75 minutes for a full pass.** That is the Groq free tier,
-not the model - it caps tokens per minute, and our prompt is large enough that the ceiling
-works out at roughly two calls a minute. The script paces at 25 seconds and refuses to store a
-baseline answer, so an interrupted run costs nothing but the reports it had not reached.
+**`batch_classify.py` cannot finish 180 reports in one day on the Groq free tier.** The tier
+caps tokens twice: 8,000 per minute, and 200,000 per day. Our prompt is ~2,890 tokens, so one
+report costs ~2,890 against both - about two calls a minute, and **about 69 reports a day**. A
+full pass is ~520,000 tokens, roughly 2.6 days.
+
+The script paces at 25 seconds for the per-minute limit and refuses to store a baseline answer,
+so an interrupted run costs nothing but the reports it had not reached. It is resumable and
+version-aware: re-run it tomorrow and it picks up exactly where the daily cap stopped it.
 
 What running this against a real database found the first time, and why none of it showed up
 in the test suite: [docs/database-live.md](docs/database-live.md).

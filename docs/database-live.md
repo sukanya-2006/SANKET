@@ -125,20 +125,51 @@ genuine finding.
 `top_rule` is now nullable and both paths return null. The whole point of the repository seam
 is that a caller cannot tell which one answered.
 
-### And the rate limit underneath all of it
+### And the rate limits underneath all of it
 
-The trigger for most of the above: Groq's free tier caps **tokens** per minute, not requests.
-The system prompt is around 3,000 tokens and the observed ceiling is 8,000 TPM, which is
-roughly **two calls a minute**. `batch_classify.py` paced at 1.5 seconds, issuing forty.
+Groq's free tier caps **tokens**, not requests, and it does so twice. Both bite, and they need
+different answers.
 
-The retry loop made it worse. It backed off 3, 6 and 9 seconds against a bucket that refills
-every ~25 seconds, then fell out of the loop with `response` still `None` and died on
-`response.choices` — an `AttributeError` that `classifier.py` reported as a generic fallback,
-hiding the rate limit completely. Backoff is now 30 and 45 seconds, exhaustion raises a message
-that names the actual problem, and the batch paces at 25 seconds by default.
+| limit | value | what it costs us |
+|---|---|---|
+| tokens per minute | 8,000 | ~2 calls a minute — a pacing problem |
+| tokens per day | 200,000 | **~69 reports a day — a planning problem** |
 
-A full 180-report pass therefore takes about 75 minutes on this tier. That is the real number;
-plan demos and re-runs around it.
+Our system prompt is about 2,890 tokens, so one report is one call is ~2,890 tokens against
+both budgets.
+
+**The per-minute limit.** `batch_classify.py` paced at 1.5 seconds, issuing forty calls a
+minute against a ceiling of two. The retry loop made it worse: it backed off 3, 6 and 9 seconds
+against a bucket that refills every ~25 seconds, then fell out of the loop with `response`
+still `None` and died on `response.choices` — an `AttributeError` that `classifier.py` reported
+as a generic fallback, hiding the rate limit completely. Backoff is now 30 and 45 seconds,
+exhaustion raises a message that names the actual problem, and the batch paces at 25 seconds.
+
+**A self-inflicted one in the middle of that fix.** A 30+45 second backoff totals 75 seconds,
+and `classifier.py` runs the classifier under a 60-second hard timeout. The wrapper killed
+every rate-limited call mid-backoff, so a throttled report could never succeed however many
+times it was retried — and it surfaced as `primary classifier timed out after 60.0s`, which
+points at the wrong thing entirely. Retries now check the deadline before sleeping and give up
+honestly if the wait cannot fit, and `batch_classify.py` sets its own 120-second deadline,
+because a background run has nobody waiting on it and the API's shorter deadline exists to
+protect a live request.
+
+**The per-day limit is the one that changes plans.** Pacing does not help against it. At ~2,890
+tokens a report and 200,000 tokens a day:
+
+- **69 reports a day**, maximum
+- a full 180-report pass is ~520,000 tokens — **about 2.6 days**
+- and every wasted run spends the same budget as a real one
+
+That is the constraint to design around, not the 75 minutes of wall-clock the pacing implies.
+Three ways out, in order of leverage:
+
+1. **Shrink the system prompt.** It is ~2,890 tokens and it is paid on every single call.
+   Halving it doubles the daily throughput. It also changes model behaviour, so it needs
+   re-validating against the gold set rather than being trimmed casually.
+2. **Upgrade off the free tier.** The 429 body links to Groq's Dev Tier.
+3. **Spread the run across days.** `batch_classify.py` is resumable and version-aware, so
+   this costs nothing but time — re-run it tomorrow and it picks up exactly where it stopped.
 
 ---
 

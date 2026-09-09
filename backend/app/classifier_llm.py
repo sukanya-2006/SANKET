@@ -27,11 +27,22 @@ load_dotenv()
 MODEL_NAME = "openai/gpt-oss-20b"  # same free-tier model already in use elsewhere
 
 # Retry budget for a rate-limited call. The free tier's token bucket refills on roughly a
-# 25-second cycle for a prompt this size, so the waits step past one full window and then
-# two. Three attempts spanning ~75 seconds is the point where retrying harder stops helping
-# and the caller should slow down instead.
+# 25-second cycle for a prompt this size, so a backoff shorter than that gives up before the
+# limit could possibly have cleared.
+#
+# These waits are a CEILING, not a schedule. classifier.py runs this function under a hard
+# timeout (LLM_TIMEOUT_SECONDS), and an inner retry budget that outlives the outer deadline is
+# worse than no retry at all: the wrapper kills the call mid-sleep, so a rate-limited report
+# can never succeed no matter how many times it is retried. A 30+45s backoff under a 60s
+# timeout did exactly that - every retryable failure became a guaranteed timeout.
+#
+# _sleep_within_deadline() below only ever sleeps if the wait plus another attempt still fit
+# inside the deadline, so the two settings cannot contradict each other again.
 RETRY_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = (30, 45)
+
+# Rough allowance for one more API call after a sleep, when deciding whether a retry fits.
+ESTIMATED_CALL_SECONDS = 5.0
 
 # Built on first use, not at import. Constructing this at import time meant a missing
 # GROQ_API_KEY took down the entire API — no /health, no /reports, no dashboard — which is
@@ -216,6 +227,22 @@ def _extract_json(raw_text: str) -> dict:
     return json.loads(text)
 
 
+def _sleep_within_deadline(seconds: float, deadline: float) -> bool:
+    """Sleep for `seconds` only if that plus another attempt still fits before `deadline`.
+
+    Returns True if it slept and a retry is worth making, False if the deadline leaves no room
+    - in which case the caller must give up now and let the baseline answer, rather than
+    sleeping into a timeout the wrapper will kill anyway.
+    """
+    import time
+
+    remaining = deadline - time.monotonic()
+    if remaining <= seconds + ESTIMATED_CALL_SECONDS:
+        return False
+    time.sleep(seconds)
+    return True
+
+
 def classify(report_text: str) -> dict:
     """Implements the Classifier protocol from classifier.py.
 
@@ -225,8 +252,16 @@ def classify(report_text: str) -> dict:
     should raise on any hard failure (network error, bad JSON) rather than try
     to patch things up - that's what the fallback pipeline is for.
     """
+    import time
+
+    from .config import get_settings
+
+    # The same deadline classifier.py enforces from the outside. Retrying past it is not just
+    # wasted - it converts a recoverable rate limit into a certain timeout.
+    deadline = time.monotonic() + get_settings().llm_timeout_seconds
+
     response = None
-    for attempt in range(3):
+    for attempt in range(RETRY_ATTEMPTS):
         try:
             response = _get_client().chat.completions.create(
                 model=MODEL_NAME,
@@ -245,14 +280,18 @@ def classify(report_text: str) -> dict:
             retryable = ("429" in err_str or "rate_limit" in err_str or "connection" in err_str
                          or "socket" in err_str or "unreachable" in err_str)
             if retryable and attempt < RETRY_ATTEMPTS - 1:
-                import time
-
                 # Groq's free tier caps TOKENS per minute, not requests, and this system
-                # prompt is ~3,000 tokens. At an 8,000 TPM ceiling the bucket refills
-                # roughly every 25 seconds, so the old 3/6/9 second backoff gave up well
-                # before the limit cleared. Wait past a full refill window instead.
-                time.sleep(RETRY_BACKOFF_SECONDS[attempt])
-                continue
+                # prompt is ~3,000 tokens. At an 8,000 TPM ceiling the bucket refills roughly
+                # every 25 seconds, so a backoff shorter than that gives up before the limit
+                # could have cleared. But only wait if the deadline leaves room for it.
+                if _sleep_within_deadline(RETRY_BACKOFF_SECONDS[attempt], deadline):
+                    continue
+                raise TimeoutError(
+                    "Groq rate-limited and the %.0fs deadline leaves no room to wait it out. "
+                    "Raise LLM_TIMEOUT_SECONDS, or space calls further apart so the token "
+                    "bucket is not empty when the call is made."
+                    % get_settings().llm_timeout_seconds
+                ) from exc
             raise
 
     if response is None:
