@@ -2,22 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { ShieldCheck, HardHat, ClipboardList, ArrowRight } from 'lucide-react';
 import WorkerAnalyzer from './pages/WorkerAnalyzer';
-
-const AdminTriage = () => (
-  <div className="min-h-screen bg-[#dce4e1] p-6 flex flex-col items-center justify-center text-[#2c3e37]">
-    <h1 className="text-2xl font-bold mb-2">Safety Admin Triage Queue</h1>
-    <p className="text-slate-600 mb-4">Ranked high-risk precursors will go here.</p>
-    <Link to="/" className="text-[#354f52] underline font-medium">← Back to Home</Link>
-  </div>
-);
-
-const AdminDashboard = () => (
-  <div className="min-h-screen bg-[#dce4e1] p-6 flex flex-col items-center justify-center text-[#2c3e37]">
-    <h1 className="text-2xl font-bold mb-2">Executive Site Density Dashboard</h1>
-    <p className="text-slate-600 mb-4">KPI metrics and site risk ranking charts will go here.</p>
-    <Link to="/" className="text-[#354f52] underline font-medium">← Back to Home</Link>
-  </div>
-);
+import AdminTriage from './pages/AdminTriage';
+import AdminDashboard from './pages/AdminDashboard';
 
 function LandingPage() {
   return (
