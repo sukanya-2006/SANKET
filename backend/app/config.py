@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Bumped whenever the classification prompt changes. Part of the cache key, so a prompt
     # edit cannot silently serve answers produced by the previous prompt.
-    prompt_version: str = "v2"
+    prompt_version: str = "v4"
 
     # TECH_STACK v2: on API failure or timeout, the local baseline answers.
     # Raised from the original 10.0s default - the primary model
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # and a premature timeout wastes a perfectly good answer by discarding
     # it in favour of the much weaker stub fallback. This value is the
     # floor even if .env doesn't set LLM_TIMEOUT_SECONDS at all.
-    llm_timeout_seconds: float = 25.0
+    llm_timeout_seconds: float = 60.0
 
     cache_path: Path = Path("backend/app/llm_cache.sqlite")
     cache_enabled: bool = True
@@ -44,6 +44,21 @@ class Settings(BaseSettings):
         return bool(self.supabase_db_url)
 
 
+# backend/app/config.py -> backend/app -> backend -> repo root
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+
+    # Anchor a relative cache path to the repo root rather than the working directory.
+    # The documented way to start the server is `cd backend && uvicorn app.main:app`, so a
+    # path like "backend/app/llm_cache.sqlite" resolved against the cwd becomes
+    # backend/backend/app/... which does not exist - and every /analyze request then 500s on
+    # "unable to open database file". The tests never saw it because conftest points
+    # CACHE_PATH at a tmp directory that always exists.
+    if not settings.cache_path.is_absolute():
+        object.__setattr__(settings, "cache_path", REPO_ROOT / settings.cache_path)
+
+    return settings

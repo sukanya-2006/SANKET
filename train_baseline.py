@@ -84,11 +84,13 @@ def load_and_join_data() -> pd.DataFrame:
 
     reports = []
     if os.path.exists(SYNTHETIC_PATH):
-        syn = pd.read_csv(SYNTHETIC_PATH, encoding="utf-8-sig")
-        reports.append(syn[["report_id", "text"]])
+        syn = pd.read_csv(SYNTHETIC_PATH, encoding="utf-8-sig")[["report_id", "text"]].copy()
+        syn["source"] = "synthetic"
+        reports.append(syn)
     if os.path.exists(OSHA_PATH):
-        osha = pd.read_csv(OSHA_PATH, encoding="utf-8-sig")
-        reports.append(osha[["report_id", "text"]])
+        osha = pd.read_csv(OSHA_PATH, encoding="utf-8-sig")[["report_id", "text"]].copy()
+        osha["source"] = "osha"
+        reports.append(osha)
 
     if not reports:
         sys.exit(f"[!] Neither {SYNTHETIC_PATH} nor {OSHA_PATH} were found.")
@@ -96,6 +98,22 @@ def load_and_join_data() -> pd.DataFrame:
     all_reports = pd.concat(reports, ignore_index=True)
 
     merged = labels.merge(all_reports, on="report_id", how="inner")
+
+    # Train on SYNTHETIC reports only.
+    #
+    # The whole point of the OSHA table in eval/run_eval.py is that it is a
+    # generalisation check on text the baseline has never seen. Without this filter the
+    # baseline trains on the OSHA rows too, and that table silently stops measuring
+    # generalisation - it becomes another in-sample score.
+    #
+    # This matters far more as the OSHA set grows. At 30 OSHA rows against 144 synthetic
+    # the contamination was small; at 1000 the baseline would be 88% OSHA-trained and the
+    # claim "TF-IDF trained on synthetic reports" would simply be false.
+    osha_rows = int((merged["source"] == "osha").sum())
+    if osha_rows:
+        print(f"Excluding {osha_rows} OSHA reports from training - they are the "
+              "generalisation set.")
+        merged = merged[merged["source"] == "synthetic"].reset_index(drop=True)
 
     if len(merged) < len(labels):
         missing = len(labels) - len(merged)

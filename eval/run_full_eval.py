@@ -58,7 +58,14 @@ def process_single_report(row):
     actual_precursor = row.actual_is_sif_precursor
     actual_sev = row.actual_severity
 
-    # Baseline prediction
+    # Baseline prediction.
+    #
+    # WARNING - THIS IS NOT A FAIR BASELINE SCORE.
+    # classifier_base loads backend/app/baseline_model.joblib, which train_baseline.py
+    # deliberately retrains on EVERY label so the shipped fallback is as strong as possible.
+    # Every report scored here was therefore in its training set, so the resulting F1 (0.970
+    # when last run) is memorisation. eval/run_eval.py refits inside cross-validation folds
+    # and gets 0.784 on the same data. Quote that one. See docs/eval-diagnosis.md.
     base_res = classifier_base.classify(text)
     base_pred = bool(base_res["is_sif_precursor"])
 

@@ -56,9 +56,18 @@ pressure, stored mechanical/hydraulic energy, live process fluid)
 - work_at_height: a person, tool, or material able to fall far enough to kill or maim
 - lifting: cranes, hoists, rigging, slings, forklifts, suspended/swinging loads
 - line_of_fire: a person in the path of something moving, energised, or pressurised
+- line_of_fire also includes caught-in, caught-between, pinch-point, crush, kickback,
+  and unguarded-moving-part events when a person's body is exposed to the movement
+  or release of mechanical energy. Examples include hands caught in rollers/chucks,
+  machinery pinch points, moving machine parts, and material kicked back toward a worker.
 - confined_space: entry into a tank, vessel, pit, or space with restricted egress or hazardous atmosphere
 - hot_work: welding, cutting, grinding, or an ignition source near flammables
 - driving: operating a vehicle on site or public road
+- When a vehicle itself is moving and strikes, pins, or runs over a person, classify
+  the primary hazard as driving. When the hazard is a load being lifted, suspended,
+  swung, or dropped by equipment, classify it as lifting. When the primary exposure
+  is a moving object or machine part striking/catching a person, classify it as
+  line_of_fire.
 - permit_to_work: work requiring authorisation that was not raised, valid, or followed (fallback \
 category only - use when no other category fits better)
 
@@ -98,12 +107,19 @@ GATE 3 - SEVERITY (severity, 1-5) - always score this, for every report
 CRITICAL: score the PLAUSIBLE WORST-CASE variation, never the actual reported outcome. Ask
 explicitly: "if the timing shifted by a few seconds, the position by a metre, or a last-second
 catch/rescue had NOT happened, what is the REALISTIC outcome THEN?" - realistic, not the most
-dramatic thing you can imagine. This is a genuine discriminating judgement, not a reflex - most
-Gate-1-yes reports should NOT automatically land at 4 or 5. Base rate check: across a large set
-of real safety reports where a hazard was present, only roughly one in five plausibly escalates
-to a life-altering or fatal outcome. If you find yourself scoring 4 or 5 for most reports you
-read, you are almost certainly over-scoring - stop and re-examine what specifically makes THIS
-scenario's worst case severe, rather than defaulting to "height/energy/confined space = severe."
+dramatic thing you can imagine. This is a genuine discriminating judgement, not a reflex - a
+Gate-1-yes report does NOT automatically land at 4 or 5.
+
+Score each report on its own facts, and do NOT calibrate to how often you expect severe reports
+to occur. You have no reliable information about the base rate of the set you are reading, and
+guessing at it makes you wrong on the report in front of you. If the realistic worst-case outcome
+genuinely involves permanent disability or death, score 4 or 5 even if that means many reports in
+a row land there. Never lower a score to keep a distribution looking plausible.
+
+(Our own labelled set runs at roughly 59% precursors, because every synthetic report was
+generated centred on a hazard category. An earlier version of this prompt asserted "roughly one
+in five", which is the rate in a realistic report stream but not in this data - and the model was
+penalised for obeying it. See docs/eval-diagnosis.md.)
 
 Two worked examples to calibrate against:
 - A contractor on a ladder loses footing and falls six inches onto a padded floor, spraining a
@@ -140,7 +156,19 @@ the same words the human annotators are applying, and you are scored against the
 4 = THE PERSON CANNOT RETURN TO THE SAME JOB. Amputation, loss of an eye, spinal cord injury,
     burn needing grafts, permanent restriction. Not "was badly hurt" - permanently unable.
 5 = someone dies, and you can name the mechanism in one sentence after ONE change.
+IMPORTANT SEVERITY CALIBRATION:
+Do not downgrade severity simply because the report says "hospitalized" or does not explicitly
+state a permanent disability. Judge the realistic outcome under the ONE-CHANGE RULE.
 
+Use severity 4 when the described mechanism could realistically cause permanent loss of function,
+amputation, major disabling injury, or inability to return to the same job after ONE change.
+Use severity 5 when ONE realistic change could result in death.
+
+For vehicle strikes, crushing/pinning, severe falls, major machinery entrapment, falling heavy
+objects, electrical contact, or serious head/neck injuries, explicitly consider whether ONE
+small change in timing, position, or containment could produce a fatal or permanently disabling
+outcome. Do not automatically assign severity 2 or 3 merely because the reported injury was
+"hospitalized" or described as a fracture.
 THE 3/4 BOUNDARY IS THE ONE THAT DECIDES THE LABEL, and it is a single question:
     "Would this person be permanently unable to do the same job again?"
     Yes -> 4 or 5.   No -> 3 or below.
@@ -171,7 +199,6 @@ Respond with ONLY a single JSON object, no markdown fences, no commentary, match
   "reasoning": "<one or two sentences explaining the gates and the decision>"
 }"""
 
-
 def _extract_json(raw_text: str) -> dict:
     """Strip markdown fences if the model added them despite instructions, then parse."""
     text = raw_text.strip()
@@ -192,7 +219,7 @@ def classify(report_text: str) -> dict:
     to patch things up - that's what the fallback pipeline is for.
     """
     response = None
-    for attempt in range(5):
+    for attempt in range(3):
         try:
             response = _get_client().chat.completions.create(
                 model=MODEL_NAME,
@@ -252,4 +279,4 @@ def classify(report_text: str) -> dict:
 # Bumped to distinguish predictions made under the g3fix3 severity-calibration
 # examples (short-fall / quick-recovery worked examples added to Gate 3) from
 # earlier g3fix2 predictions - lets the resumable reclassify script tell them apart.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2"
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-nobaserate"

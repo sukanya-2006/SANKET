@@ -171,3 +171,5 @@
 96,yes,line_of_fire,unclear,5,True,2.1,agreed
 105,yes,work_at_height,failed,5,True,2.1,agreed
 113,yes,confined_space,failed,5,True,2.1,agreed
+156,yes,driving,unclear,5,False,2.1,agreed
+173,yes,line_of_fire,unclear,2,False,2.1,agreed
