@@ -219,28 +219,45 @@ def classify(report_text: str) -> dict:
     to patch things up - that's what the fallback pipeline is for.
     """
     response = None
+    last_exc = None
+
     for attempt in range(3):
         try:
             response = _get_client().chat.completions.create(
                 model=MODEL_NAME,
-                max_tokens=1200,  # headroom for response + reasoning, fits within Groq TPM limit
-                temperature=0.1,  # low temperature - this is a classification task, not creative writing
-                reasoning_effort="low",  # rubric gives explicit rules; deep reasoning isn't
-                                          # needed and just burns the token budget
+                max_tokens=500,
+                temperature=0.1,
+                reasoning_effort="low",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": f"Classify this safety report:\n\n{report_text}"},
                 ],
             )
             break
+
         except Exception as exc:
+            last_exc = exc
             err_str = str(exc).lower()
-            if ("429" in err_str or "rate_limit" in err_str or "connection" in err_str or "socket" in err_str or "unreachable" in err_str) and attempt < 4:
+
+            is_retryable = (
+                "429" in err_str
+                or "rate_limit" in err_str
+                or "connection" in err_str
+                or "socket" in err_str
+                or "unreachable" in err_str
+            )
+
+            if is_retryable and attempt < 2:
                 import time
                 time.sleep(3.0 * (attempt + 1))
                 continue
+
             raise
 
+    if response is None:
+        raise RuntimeError(
+            f"Groq call failed after all retries: {last_exc}"
+        ) from last_exc
     raw_content = response.choices[0].message.content
 
     if not raw_content or not raw_content.strip():
@@ -279,4 +296,4 @@ def classify(report_text: str) -> dict:
 # Bumped to distinguish predictions made under the g3fix3 severity-calibration
 # examples (short-fall / quick-recovery worked examples added to Gate 3) from
 # earlier g3fix2 predictions - lets the resumable reclassify script tell them apart.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-nobaserate"
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-g3fix4"
