@@ -46,6 +46,11 @@ class LSRRule(str, Enum):
     NONE = "none"
 
 
+Source = Literal["synthetic", "osha"]
+Shift = Literal["day", "night"]
+ReportStatus = Literal["active", "dispatched", "archived"]
+
+
 class ClassificationResult(BaseModel):
     """Master plan §5. `recommended_check` added by backend patch v1.1 Amendment B."""
 
@@ -63,12 +68,23 @@ class ClassificationResult(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    """Body for POST /analyze. Doubles as the worker submission: analysing a report and
+    saving it are the same request, so a report can never be classified without also being
+    persisted (or vice versa).
+    """
+
     report_text: str = Field(min_length=1, max_length=20_000)
+    source: Source = "synthetic"
+    site: str | None = None
+    activity: str | None = None
+    shift: Shift | None = None
+    is_contractor: bool | None = None
 
 
 class AnalyzeResponse(BaseModel):
     """What the live-analyse box on screen 1 renders."""
 
+    report_id: str
     result: ClassificationResult
     model_version: str
     is_fallback: bool = False
@@ -79,10 +95,6 @@ class AnalyzeResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Reports — master plan §6 metadata
 # ---------------------------------------------------------------------------
-
-Source = Literal["synthetic", "osha"]
-Shift = Literal["day", "night"]
-ReportStatus = Literal["active", "dispatched", "archived"]
 
 
 class ReportSummary(BaseModel):

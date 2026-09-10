@@ -164,6 +164,7 @@ choice between Postgres and the seeded stub. Swapping either out does not touch 
 """
 
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
@@ -216,24 +217,65 @@ def meta() -> dict:
 
 @router.post("/analyze", response_model=AnalyzeResponse, tags=["analyze"])
 def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
-    """Classify one free-text report.
+    """Classify one free-text report and save it.
+
+    This is also the worker-submission endpoint: WorkerAnalyzer.jsx posts here, so classifying
+    and persisting happen as one request under one report_id. Previously this handler only
+    classified and returned — the report, its prediction, and its status were never written
+    anywhere, so nothing submitted by a worker ever reached the reports table or the admin
+    triage queue.
 
     `is_fallback` is true when the primary classifier failed, timed out, or returned output the
     schema rejected twice, and the local baseline answered instead. The UI must show that plainly
     as "degraded mode — keyword baseline" rather than quietly serving a weaker answer.
     """
+    report_id = str(uuid.uuid4())
+    created_at = datetime.now(timezone.utc)
+
     try:
         outcome = classifier.classify(payload.report_text)
     except classifier.ClassificationUnavailable as exc:
         # Both classifiers are down. Say so; never invent a label.
         raise HTTPException(status_code=503, detail=f"classification unavailable: {exc}") from exc
 
+    # The worker UI doesn't collect site/activity/shift, but a synthetic report row requires
+    # them (schema.sql: synthetic_rows_carry_site_taxonomy). Default rather than fail the
+    # submission — flagged here rather than hidden, since these reports won't group
+    # meaningfully in the site/activity/shift dashboards until the form collects real values.
+    site = payload.site or "Unspecified"
+    activity = payload.activity or "Unspecified"
+    shift = payload.shift or "day"
+
+    try:
+        repository.create_report(
+            report_id=report_id,
+            report_text=payload.report_text,
+            source=payload.source,
+            site=site,
+            activity=activity,
+            shift=shift,
+            is_contractor=payload.is_contractor,
+            created_at=created_at,
+            result=outcome.result,
+            model_version=outcome.model_version,
+            is_fallback=outcome.is_fallback,
+        )
+    except Exception as exc:  # noqa: BLE001 - a failed save must be a loud 500, never silent
+        log.error(
+            "failed to save report %s (report/prediction/status write): %s: %s",
+            report_id,
+            type(exc).__name__,
+            exc,
+        )
+        raise HTTPException(status_code=500, detail="failed to save report") from exc
+
     return AnalyzeResponse(
+        report_id=report_id,
         result=outcome.result,
         model_version=outcome.model_version,
         is_fallback=outcome.is_fallback,
         latency_ms=outcome.latency_ms,
-        created_at=datetime.now(timezone.utc),
+        created_at=created_at,
     )
 
 

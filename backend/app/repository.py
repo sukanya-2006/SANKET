@@ -22,6 +22,11 @@ _SUMMARY_FIELDS = set(ReportSummary.model_fields)
 
 _stub_status_overrides: dict[str, str] = {}
 
+# Reports created through create_report() while not live(). Without this, a worker's
+# submission would classify fine but then vanish — all_reports() only ever returned the
+# frozen seed data, so nothing written here would ever be visible in the triage queue.
+_stub_extra_reports: list[ReportDetail] = []
+
 SELECT_REPORTS = """
 SELECT r.report_id, r.report_text, r.source, r.site, r.activity, r.shift,
        r.report_date, r.is_contractor, r.created_at,
@@ -44,11 +49,12 @@ def _rows_from_db() -> list[ReportDetail]:
 
 def all_reports() -> list[ReportDetail]:
     if not live():
+        combined = STUB_REPORTS + _stub_extra_reports
         if not _stub_status_overrides:
-            return STUB_REPORTS
+            return combined
         return [
             r.model_copy(update={"status": _stub_status_overrides.get(r.report_id, r.status)})
-            for r in STUB_REPORTS
+            for r in combined
         ]
     try:
         return _rows_from_db()
@@ -95,6 +101,73 @@ def list_reports(
         for r in items[offset : offset + limit]
     ]
     return page, total
+
+
+def create_report(
+    *,
+    report_id: str,
+    report_text: str,
+    source: str,
+    site: str | None,
+    activity: str | None,
+    shift: str | None,
+    is_contractor: bool | None,
+    created_at,
+    result,
+    model_version: str,
+    is_fallback: bool,
+) -> ReportDetail:
+    """Persist one worker submission: the reports row, its prediction, and status=active,
+    all under the same report_id. This is the write-side counterpart that was missing —
+    every function above this one reads; nothing wrote.
+
+    Errors are never swallowed here. If the database insert fails, the exception propagates
+    to the caller (routes.py), which turns it into a 500 rather than reporting success on a
+    report that was never actually saved.
+    """
+    if live():
+        db.insert_report(
+            report_id=report_id,
+            report_text=report_text,
+            source=source,
+            site=site,
+            activity=activity,
+            shift=shift,
+            is_contractor=is_contractor,
+            created_at=created_at,
+        )
+        db.insert_prediction(report_id, result, model_version, is_fallback)
+        db.set_report_status(report_id, "active")
+
+        found = get_report(report_id)
+        if found is None:
+            # The inserts above succeeded but the row can't be read back — treat that as a
+            # real failure rather than returning something half-built to the caller.
+            raise RuntimeError(f"report {report_id} was written but could not be re-read")
+        return found
+
+    detail = ReportDetail(
+        report_id=report_id,
+        report_text=report_text,
+        source=source,
+        site=site,
+        activity=activity,
+        shift=shift,
+        is_contractor=is_contractor,
+        report_date=created_at.date(),
+        created_at=created_at,
+        classified_at=created_at,
+        model_version=model_version,
+        is_sif_precursor=result.is_sif_precursor,
+        severity=result.severity,
+        lsr_rule=result.lsr_rule,
+        control_status=result.control_status,
+        confidence=result.confidence,
+        status="active",
+        result=result,
+    )
+    _stub_extra_reports.append(detail)
+    return detail
 
 
 def get_report(report_id: str) -> ReportDetail | None:

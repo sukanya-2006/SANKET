@@ -112,6 +112,51 @@ def apply_schema() -> None:
     log.info("schema applied")
 
 
+INSERT_REPORT = """
+INSERT INTO reports (
+    report_id, report_text, source, site, activity, shift, report_date, is_contractor, created_at
+) VALUES (
+    %(report_id)s, %(report_text)s, %(source)s, %(site)s, %(activity)s, %(shift)s,
+    %(report_date)s, %(is_contractor)s, %(created_at)s
+)
+"""
+
+
+def insert_report(
+    report_id: str,
+    report_text: str,
+    source: str,
+    site: str | None,
+    activity: str | None,
+    shift: str | None,
+    is_contractor: bool | None,
+    created_at: Any,
+) -> None:
+    """Write the worker's submission into `reports`. This was the missing write: routes.py
+    used to classify a report and hand the result straight back without ever calling this.
+
+    Deliberately NOT gated behind `is_live()` the way insert_prediction/set_report_status are:
+    repository.create_report() only reaches this function once it has already confirmed
+    is_live() is true, and from here a failure must propagate as a real exception — never a
+    silent no-op — so a broken write surfaces as a 500 instead of a report that quietly never
+    existed.
+    """
+    execute(
+        INSERT_REPORT,
+        {
+            "report_id": report_id,
+            "report_text": report_text,
+            "source": source,
+            "site": site,
+            "activity": activity,
+            "shift": shift,
+            "report_date": created_at.date(),
+            "is_contractor": is_contractor,
+            "created_at": created_at,
+        },
+    )
+
+
 INSERT_PREDICTION = """
 INSERT INTO predictions (
     report_id, hazard_assessment, lsr_rule, control_status, severity,
