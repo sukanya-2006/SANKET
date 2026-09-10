@@ -2,10 +2,10 @@
 
 Supabase is Postgres, so we connect with psycopg over the connection string rather than through
 the REST client. That is deliberate: it lets the aggregation execute the exact statements in
-`sql/aggregates.sql`, which is the artifact Member 4 has to be able to read aloud, instead of
+sql/aggregates.sql, which is the artifact Member 4 has to be able to read aloud, instead of
 reimplementing them in a query builder where nobody can check them.
 
-The API runs fine with no database. `is_live()` is false, and every caller falls back to the
+The API runs fine with no database. is_live() is false, and every caller falls back to the
 seeded stub. Member 5 is never blocked on an instance being awake, and the demo does not die
 because a free-tier database went to sleep.
 
@@ -57,20 +57,23 @@ def is_live() -> bool:
     """True when a real database is behind the API rather than the seeded stub."""
     if not get_settings().db_configured:
         return False
+
     try:
         import psycopg  # noqa: F401
     except ImportError:
         log.warning("SUPABASE_DB_URL is set but psycopg is not installed; using the stub")
         return False
+
     return True
 
 
 @contextmanager
 def connection() -> Iterator[Any]:
-    """A short-lived connection. No pool: a 22-day prototype at demo traffic does not need one."""
+    """A short-lived connection for individual database operations."""
     import psycopg
 
     conn = psycopg.connect(get_settings().supabase_db_url)
+
     try:
         yield conn
         conn.commit()
@@ -99,6 +102,7 @@ def execute(sql: str, params: dict[str, Any] | None = None) -> int:
 def executemany(sql: str, rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
+
     with connection() as conn, conn.cursor() as cur:
         cur.executemany(sql, rows)
         return cur.rowcount
@@ -109,6 +113,7 @@ def apply_schema() -> None:
     with connection() as conn, conn.cursor() as cur:
         cur.execute(SCHEMA_SQL.read_text(encoding="utf-8"))
         cur.execute(statement("latest_predictions"))
+
     log.info("schema applied")
 
 
@@ -132,14 +137,9 @@ def insert_report(
     is_contractor: bool | None,
     created_at: Any,
 ) -> None:
-    """Write the worker's submission into `reports`. This was the missing write: routes.py
-    used to classify a report and hand the result straight back without ever calling this.
+    """Write one report row to reports.
 
-    Deliberately NOT gated behind `is_live()` the way insert_prediction/set_report_status are:
-    repository.create_report() only reaches this function once it has already confirmed
-    is_live() is true, and from here a failure must propagate as a real exception — never a
-    silent no-op — so a broken write surfaces as a 500 instead of a report that quietly never
-    existed.
+    Errors propagate to the caller. This function is intentionally not a silent no-op.
     """
     execute(
         INSERT_REPORT,
@@ -170,7 +170,12 @@ INSERT INTO predictions (
 """
 
 
-def prediction_row(report_id: str, result: Any, model_version: str, is_fallback: bool) -> dict:
+def prediction_row(
+    report_id: str,
+    result: Any,
+    model_version: str,
+    is_fallback: bool,
+) -> dict:
     import json
 
     return {
@@ -189,34 +194,127 @@ def prediction_row(report_id: str, result: Any, model_version: str, is_fallback:
     }
 
 
-def insert_prediction(report_id: str, result: Any, model_version: str, is_fallback: bool = False) -> None:
+def insert_prediction(
+    report_id: str,
+    result: Any,
+    model_version: str,
+    is_fallback: bool = False,
+) -> None:
     """Append one prediction.
 
-    Never an UPDATE. The table is append-only by design, so an earlier judgement stays on the
-    record and "every judgement is logged and reviewable" is structural, not a promise.
+    Never an UPDATE. The table is append-only by design.
     """
     if not is_live():
         return
-    execute(INSERT_PREDICTION, prediction_row(report_id, result, model_version, is_fallback))
+
+    execute(
+        INSERT_PREDICTION,
+        prediction_row(report_id, result, model_version, is_fallback),
+    )
 
 
 def set_report_status(report_id: str, status: str) -> None:
-    """Upsert one report's workflow status (active / dispatched / archived).
+    """Upsert one report's workflow status.
 
-    Deliberately NOT append-only, unlike insert_prediction above. Status is current workflow
-    state, not a judgement - there is exactly one right answer to "what is this report's status
-    right now", so an UPSERT is correct here.
-
-    No-ops in stub mode. repository.update_status() layers an in-memory override in that case.
+    Status is current workflow state, so there is one current status per report.
     """
     if not is_live():
         return
+
     execute(
         """
         INSERT INTO report_status (report_id, status, updated_at)
         VALUES (%(report_id)s, %(status)s, now())
         ON CONFLICT (report_id)
-        DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+        DO UPDATE SET
+            status = EXCLUDED.status,
+            updated_at = EXCLUDED.updated_at
         """,
-        {"report_id": report_id, "status": status},
+        {
+            "report_id": report_id,
+            "status": status,
+        },
     )
+
+
+def save_report_bundle(
+    *,
+    report_id: str,
+    report_text: str,
+    source: str,
+    site: str | None,
+    activity: str | None,
+    shift: str | None,
+    is_contractor: bool | None,
+    created_at: Any,
+    result: Any,
+    model_version: str,
+    is_fallback: bool,
+) -> None:
+    """Atomically save a worker report, prediction, and active status.
+
+    All three writes use the same database connection and transaction.
+    If any write fails, the entire transaction is rolled back.
+    """
+
+    if not is_live():
+        return
+
+    params_report = {
+        "report_id": report_id,
+        "report_text": report_text,
+        "source": source,
+        "site": site,
+        "activity": activity,
+        "shift": shift,
+        "report_date": created_at.date(),
+        "is_contractor": is_contractor,
+        "created_at": created_at,
+    }
+
+    prediction_params = prediction_row(
+        report_id,
+        result,
+        model_version,
+        is_fallback,
+    )
+
+    status_params = {
+        "report_id": report_id,
+        "status": "active",
+    }
+
+    import psycopg
+
+    conn = psycopg.connect(get_settings().supabase_db_url)
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(INSERT_REPORT, params_report)
+
+            cur.execute(INSERT_PREDICTION, prediction_params)
+
+            cur.execute(
+                """
+                INSERT INTO report_status (report_id, status, updated_at)
+                VALUES (%(report_id)s, %(status)s, now())
+                ON CONFLICT (report_id)
+                DO UPDATE SET
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                status_params,
+            )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        log.exception(
+            "atomic report write failed for report_id=%s; transaction rolled back",
+            report_id,
+        )
+        raise
+
+    finally:
+        conn.close()
