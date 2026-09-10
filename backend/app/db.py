@@ -1,4 +1,4 @@
-"""Database access — plain parameterised SQL against Supabase Postgres.
+﻿"""Database access - plain parameterised SQL against Supabase Postgres.
 
 Supabase is Postgres, so we connect with psycopg over the connection string rather than through
 the REST client. That is deliberate: it lets the aggregation execute the exact statements in
@@ -31,20 +31,12 @@ SCHEMA_SQL = SQL_DIR / "schema.sql"
 AGGREGATES_SQL = SQL_DIR / "aggregates.sql"
 
 
-# ---------------------------------------------------------------------------
-# Named statements
-# ---------------------------------------------------------------------------
-# aggregates.sql marks each statement with `-- name: <id>`. Keeping the SQL in a .sql file
-# rather than in Python string literals is what makes it reviewable by the whole team.
-
-
 @lru_cache
 def named_statements() -> dict[str, str]:
     text = AGGREGATES_SQL.read_text(encoding="utf-8")
     blocks = re.split(r"^--\s*name:\s*(\w+)\s*$", text, flags=re.MULTILINE)
 
     statements: dict[str, str] = {}
-    # re.split returns [preamble, name1, body1, name2, body2, ...]
     for name, body in zip(blocks[1::2], blocks[2::2]):
         sql = "\n".join(
             line for line in body.splitlines() if not line.strip().startswith("--")
@@ -57,13 +49,8 @@ def named_statements() -> dict[str, str]:
 def statement(name: str) -> str:
     try:
         return named_statements()[name]
-    except KeyError:  # pragma: no cover - a typo in a call site, caught the first time it runs
+    except KeyError:
         raise KeyError(f"no statement named {name!r} in {AGGREGATES_SQL.name}") from None
-
-
-# ---------------------------------------------------------------------------
-# Connection
-# ---------------------------------------------------------------------------
 
 
 def is_live() -> bool:
@@ -95,7 +82,7 @@ def connection() -> Iterator[Any]:
 
 
 def query(sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Run a SELECT and return rows as dicts. Always parameterised — never f-strings."""
+    """Run a SELECT and return rows as dicts. Always parameterised - never f-strings."""
     from psycopg.rows import dict_row
 
     with connection() as conn, conn.cursor(row_factory=dict_row) as cur:
@@ -118,16 +105,12 @@ def executemany(sql: str, rows: list[dict[str, Any]]) -> int:
 
 
 def apply_schema() -> None:
-    """Create the tables and the latest_predictions view. Idempotent — safe to re-run."""
+    """Create the tables and the latest_predictions view. Idempotent - safe to re-run."""
     with connection() as conn, conn.cursor() as cur:
         cur.execute(SCHEMA_SQL.read_text(encoding="utf-8"))
         cur.execute(statement("latest_predictions"))
     log.info("schema applied")
 
-
-# ---------------------------------------------------------------------------
-# Writes
-# ---------------------------------------------------------------------------
 
 INSERT_PREDICTION = """
 INSERT INTO predictions (
@@ -170,3 +153,25 @@ def insert_prediction(report_id: str, result: Any, model_version: str, is_fallba
     if not is_live():
         return
     execute(INSERT_PREDICTION, prediction_row(report_id, result, model_version, is_fallback))
+
+
+def set_report_status(report_id: str, status: str) -> None:
+    """Upsert one report's workflow status (active / dispatched / archived).
+
+    Deliberately NOT append-only, unlike insert_prediction above. Status is current workflow
+    state, not a judgement - there is exactly one right answer to "what is this report's status
+    right now", so an UPSERT is correct here.
+
+    No-ops in stub mode. repository.update_status() layers an in-memory override in that case.
+    """
+    if not is_live():
+        return
+    execute(
+        """
+        INSERT INTO report_status (report_id, status, updated_at)
+        VALUES (%(report_id)s, %(status)s, now())
+        ON CONFLICT (report_id)
+        DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+        """,
+        {"report_id": report_id, "status": status},
+    )

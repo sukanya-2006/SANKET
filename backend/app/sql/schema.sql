@@ -169,3 +169,20 @@ INSERT INTO sites (site, region) VALUES
     ('Naharkatiya Depot', 'Upper Assam'),
     ('Makum Terminal',    'Upper Assam')
 ON CONFLICT (site) DO NOTHING;
+
+
+
+
+-- ---------------------------------------------------------------------------
+-- report_status — workflow state (dispatched / archived), separate from predictions.
+-- Predictions are an append-only judgement log (see predictions table above); status
+-- is current workflow state, so exactly one row per report, upserted in place.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS report_status (
+    report_id   text PRIMARY KEY REFERENCES reports (report_id) ON DELETE CASCADE,
+    status      text NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'dispatched', 'archived')),
+    updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE report_status ENABLE ROW LEVEL SECURITY;
