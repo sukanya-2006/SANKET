@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     cache_path: Path = Path("backend/app/llm_cache.sqlite")
     cache_enabled: bool = True
 
-    cors_origins: str = "http://localhost:5173,http://localhost:3000"
-
+    # cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    cors_origins: str = "http://localhost:5173,http://localhost:3000,https://sanket-frontend.onrender.com"
     rubric_version: str = "2.2"
 
     @property
