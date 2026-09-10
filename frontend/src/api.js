@@ -1,5 +1,9 @@
-const BASE_URL = import.meta.env.production.VITE_API_URL || 'http://localhost:8000';
-
+const BASE_URL =
+  import.meta.env?.VITE_API_URL ||
+  (window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://sanket-backend-put3.onrender.com');
+    
 export const api = {
   analyzeReport: async (text) => {
     const res = await fetch(`${BASE_URL}/analyze`, {
