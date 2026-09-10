@@ -1,3 +1,4 @@
+
 """Locked schema — master plan §5, names per NAMES.md.
 
 Member 2 owns ClassificationResult. Member 4 owns the report, aggregate, and response
@@ -81,6 +82,7 @@ class AnalyzeResponse(BaseModel):
 
 Source = Literal["synthetic", "osha"]
 Shift = Literal["day", "night"]
+ReportStatus = Literal["active", "dispatched", "archived"]
 
 
 class ReportSummary(BaseModel):
@@ -97,6 +99,9 @@ class ReportSummary(BaseModel):
     lsr_rule: LSRRule | None = None
     control_status: ControlStatus | None = None
     confidence: float | None = None
+    # Workflow state for screen 2's triage queue. Not part of the classification —
+    # this is human action taken on a report, tracked separately in report_status.
+    status: ReportStatus = "active"
 
 
 class ReportDetail(ReportSummary):
@@ -111,6 +116,12 @@ class ReportPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class StatusUpdateRequest(BaseModel):
+    """Body for PATCH /reports/{report_id}/status. Screen 2's dispatch/archive actions."""
+
+    status: ReportStatus
 
 
 # ---------------------------------------------------------------------------
