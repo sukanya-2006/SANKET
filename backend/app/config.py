@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Bumped whenever the classification prompt changes. Part of the cache key, so a prompt
     # edit cannot silently serve answers produced by the previous prompt.
-    prompt_version: str = "v4"
+    prompt_version: str = "v5"
 
     # TECH_STACK v2: on API failure or timeout, the local baseline answers.
     # Raised from the original 10.0s default - the primary model
@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     cache_path: Path = Path("backend/app/llm_cache.sqlite")
     cache_enabled: bool = True
 
-    cors_origins: str = "http://localhost:5173,http://localhost:3000"
-
+    # cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    cors_origins: str = "http://localhost:5173,http://localhost:3000,https://sanket-frontend.onrender.com"
     rubric_version: str = "2.2"
 
     @property

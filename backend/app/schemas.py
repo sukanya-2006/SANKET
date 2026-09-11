@@ -80,9 +80,17 @@ class AnalyzeResponse(BaseModel):
 # Reports — master plan §6 metadata
 # ---------------------------------------------------------------------------
 
-Source = Literal["synthetic", "osha"]
+Source = Literal["synthetic", "osha", "worker"]
 Shift = Literal["day", "night"]
 ReportStatus = Literal["active", "dispatched", "archived"]
+
+class WorkerReportRequest(BaseModel):
+    report_text: str = Field(min_length=1, max_length=20_000)
+
+    site: str | None = None
+    activity: str | None = None
+    shift: Shift | None = None
+    is_contractor: bool | None = None
 
 
 class ReportSummary(BaseModel):
@@ -93,6 +101,7 @@ class ReportSummary(BaseModel):
     activity: str | None = None
     shift: Shift | None = None
     report_date: date
+    created_at: datetime | None = None
     is_contractor: bool | None = None
     is_sif_precursor: bool | None = None
     severity: int | None = None
@@ -105,7 +114,6 @@ class ReportSummary(BaseModel):
 
 
 class ReportDetail(ReportSummary):
-    created_at: datetime
     classified_at: datetime | None = None
     model_version: str | None = None
     result: ClassificationResult | None = None
@@ -193,3 +201,29 @@ class TrendPoint(BaseModel):
     report_count: int
     precursor_count: int
     precursor_rate: float = Field(ge=0.0, le=1.0)
+
+
+# ---------------------------------------------------------------------------
+# Worker report submission
+# ---------------------------------------------------------------------------
+
+class WorkerReportRequest(BaseModel):
+    """A safety report submitted directly by a worker."""
+
+    report_text: str = Field(min_length=1, max_length=20_000)
+
+    site: str
+    activity: str
+    shift: Shift
+    is_contractor: bool | None = None
+
+
+class WorkerReportResponse(BaseModel):
+    """Returned after a worker report has been saved and classified."""
+
+    report_id: str
+    result: ClassificationResult
+    model_version: str
+    is_fallback: bool = False
+    latency_ms: int
+    created_at: datetime

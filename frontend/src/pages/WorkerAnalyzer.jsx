@@ -20,20 +20,35 @@ export default function WorkerAnalyzer() {
     onError: (message) => setVoiceError(message),
   });
 
-  const handleAnalyze = async (e) => {
-    e.preventDefault();
-    if (!text.trim()) return;
-    setLoading(true);
-    try {
-      const data = await api.analyzeReport(text);
-      setResult(data);
-    } catch (err) {
-      console.error(err);
-      alert('Error connecting to backend analysis engine.');
-    } finally {
-      setLoading(false);
-    }
-  };
+ const handleAnalyze = async (e) => {
+  e.preventDefault();
+
+  if (!text.trim()) return;
+
+  setLoading(true);
+
+  try {
+    const data = await api.submitWorkerReport({
+      report_text: text,
+      site: "Rig 4",
+      activity: "General Operations",
+      shift: "day",
+      is_contractor: false,
+    });
+
+    setResult(data);
+
+  } catch (err) {
+    console.error(err);
+
+    alert(
+      err.message || "Error submitting safety report."
+    );
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-[#dce4e1] text-[#2c3e37] flex flex-col items-center justify-start p-4 md:p-8">
@@ -175,3 +190,19 @@ export default function WorkerAnalyzer() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

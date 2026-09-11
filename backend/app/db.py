@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator
+from datetime import date
 
 from .config import get_settings
 
@@ -54,16 +55,31 @@ def statement(name: str) -> str:
 
 
 def is_live() -> bool:
-    """True when a real database is behind the API rather than the seeded stub."""
-    if not get_settings().db_configured:
+    """
+    Return True only if the database is configured.
+
+    This does not open a connection on every request because doing that
+    would create unnecessary connections. Actual connection errors are
+    raised by connection() and visible in the API logs.
+    """
+
+    settings = get_settings()
+
+    if not settings.db_configured:
         return False
+
     try:
         import psycopg  # noqa: F401
-    except ImportError:
-        log.warning("SUPABASE_DB_URL is set but psycopg is not installed; using the stub")
-        return False
-    return True
+        return True
 
+    except ImportError:
+
+        log.warning(
+            "SUPABASE_DB_URL is configured but psycopg "
+            "is not installed."
+        )
+
+        return False
 
 @contextmanager
 def connection() -> Iterator[Any]:
@@ -112,6 +128,29 @@ def apply_schema() -> None:
     log.info("schema applied")
 
 
+INSERT_REPORT = """
+INSERT INTO reports (
+    report_id,
+    report_text,
+    source,
+    site,
+    activity,
+    shift,
+    report_date,
+    is_contractor
+)
+VALUES (
+    %(report_id)s,
+    %(report_text)s,
+    %(source)s,
+    %(site)s,
+    %(activity)s,
+    %(shift)s,
+    %(report_date)s,
+    %(is_contractor)s
+)
+"""
+
 INSERT_PREDICTION = """
 INSERT INTO predictions (
     report_id, hazard_assessment, lsr_rule, control_status, severity,
@@ -144,6 +183,33 @@ def prediction_row(report_id: str, result: Any, model_version: str, is_fallback:
     }
 
 
+def insert_report(
+    report_id: str,
+    report_text: str,
+    site: str,
+    activity: str,
+    shift: str,
+    is_contractor: bool | None = None,
+) -> None:
+    """Insert a worker-submitted report."""
+
+    if not is_live():
+        return
+
+    execute(
+        INSERT_REPORT,
+        {
+            "report_id": report_id,
+            "report_text": report_text,
+            "source": "worker",
+            "site": site,
+            "activity": activity,
+            "shift": shift,
+            "report_date": date.today(),
+            "is_contractor": is_contractor,
+        },
+    )
+
 def insert_prediction(report_id: str, result: Any, model_version: str, is_fallback: bool = False) -> None:
     """Append one prediction.
 
@@ -175,3 +241,5 @@ def set_report_status(report_id: str, status: str) -> None:
         """,
         {"report_id": report_id, "status": status},
     )
+
+

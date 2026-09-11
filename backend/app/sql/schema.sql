@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS sites (
 CREATE TABLE IF NOT EXISTS reports (
     report_id      text PRIMARY KEY,
     report_text    text NOT NULL,
-    source         text NOT NULL CHECK (source IN ('synthetic', 'osha')),
+    source         text NOT NULL CHECK (source IN ('synthetic', 'osha', 'worker')),
     site           text REFERENCES sites (site),
     activity       text,
     shift          text CHECK (shift IN ('day', 'night')),
