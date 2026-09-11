@@ -156,19 +156,26 @@ the same words the human annotators are applying, and you are scored against the
 4 = THE PERSON CANNOT RETURN TO THE SAME JOB. Amputation, loss of an eye, spinal cord injury,
     burn needing grafts, permanent restriction. Not "was badly hurt" - permanently unable.
 5 = someone dies, and you can name the mechanism in one sentence after ONE change.
-IMPORTANT SEVERITY CALIBRATION:
-Do not downgrade severity simply because the report says "hospitalized" or does not explicitly
-state a permanent disability. Judge the realistic outcome under the ONE-CHANGE RULE.
+IMPORTANT SEVERITY CALIBRATION - read this as a correction to a WORDING trap, not a push toward
+high scores:
+Do not downgrade severity just because the report uses a mild-sounding WORD like "hospitalized"
+when the underlying MECHANISM you'd get after ONE change is genuinely fatal or permanently
+disabling. The word "hospitalized" alone tells you nothing - a hospitalization for observation
+after a two-foot fall is a 2, and a hospitalization after a vehicle pinning is very possibly a 5.
+Read the mechanism, not the adjective.
 
 Use severity 4 when the described mechanism could realistically cause permanent loss of function,
 amputation, major disabling injury, or inability to return to the same job after ONE change.
 Use severity 5 when ONE realistic change could result in death.
 
 For vehicle strikes, crushing/pinning, severe falls, major machinery entrapment, falling heavy
-objects, electrical contact, or serious head/neck injuries, explicitly consider whether ONE
-small change in timing, position, or containment could produce a fatal or permanently disabling
-outcome. Do not automatically assign severity 2 or 3 merely because the reported injury was
-"hospitalized" or described as a fracture.
+objects, electrical contact, or serious head/neck injuries, explicitly apply the ONE-CHANGE RULE
+rather than anchoring on the reported outcome's wording alone - but the ONE-CHANGE RULE cuts both
+ways. Most reports in these categories still describe a mechanism where the realistic worst case,
+after exactly one change, is a fracture or laceration with full recovery (severity 3), not death.
+Only move to 4 or 5 when the one-change mechanism itself - not the category name - actually
+reaches "permanently unable to do the job" or "named cause of death."
+
 THE 3/4 BOUNDARY IS THE ONE THAT DECIDES THE LABEL, and it is a single question:
     "Would this person be permanently unable to do the same job again?"
     Yes -> 4 or 5.   No -> 3 or below.
@@ -178,6 +185,17 @@ An actual fatality, amputation, or ICU admission in the report scores 4 or 5 by 
 mild actual outcome does NOT automatically mean high severity either, and neither does a hazard
 merely being present near a person who was never really exposed to its failure mode - both
 directions of error matter equally here.
+
+A third worked example, because "hospitalized" is exactly the word that misleads: a worker is
+struck by a swinging pipe wrench that slips off a fitting, is hospitalized overnight for a scalp
+laceration and observation, and is discharged the next day with no lasting deficit. One change
+(the wrench striking a few centimetres differently) does not plausibly turn this into a fatality
+or a permanent disability - it stays a laceration needing stitches. Score this 3, not 5, even
+though the actual report says "hospitalized."
+
+Before you finalize a 4 or 5, re-read your own `reasoning` and check it names a specific
+realistic mechanism of death or permanent disability after exactly one change - not just the
+hazard category. If it doesn't, the score is too high; lower it.
 
 DECISION
 is_sif_precursor is true ONLY when: hazard_assessment is "yes" AND control_status is "absent" or \
@@ -293,7 +311,16 @@ def classify(report_text: str) -> dict:
 # The version string ends up in predictions.model_version and scopes every dashboard
 # aggregate, so it must change whenever the prompt does - otherwise old and new judgements
 # are averaged together silently.
-# Bumped to distinguish predictions made under the g3fix3 severity-calibration
-# examples (short-fall / quick-recovery worked examples added to Gate 3) from
-# earlier g3fix2 predictions - lets the resumable reclassify script tell them apart.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-g3fix4"
+# Bumped from g3fix4 to g3fix5: the g3fix2/g3fix3/g3fix4 "IMPORTANT SEVERITY CALIBRATION"
+# block was written to stop the model from being misled by mild-sounding WORDING like
+# "hospitalized" when the underlying mechanism was actually severe. That fix was correct
+# on its own, but 0cdd7e8 separately removed the base-rate anchor that had been the only
+# thing pulling the distribution back down for reports outside the enriched synthetic gold
+# set. With both changes in place and nothing to counterbalance the calibration block on
+# real (non-enriched) worker-submitted text, the model was left with a one-directional
+# nudge toward 4/5 and started landing on severity 5 for most live reports regardless of
+# their actual content - see the investigation notes in docs/severity-5-bug-investigation.md.
+# g3fix5 reframes the calibration block as a correction to *wording*, not a push toward
+# high scores, and adds a third worked example plus a self-check specifically for the
+# "hospitalized" trap that most triggered the bias.
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-g3fix5"

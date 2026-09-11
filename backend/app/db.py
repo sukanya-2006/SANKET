@@ -218,7 +218,18 @@ def insert_prediction(report_id: str, result: Any, model_version: str, is_fallba
     """
     if not is_live():
         return
-    execute(INSERT_PREDICTION, prediction_row(report_id, result, model_version, is_fallback))
+    row = prediction_row(report_id, result, model_version, is_fallback)
+    # SEVERITY TRACE — the literal value that becomes the %(severity)s bind parameter for
+    # this INSERT. If a report reads back with a different severity than this log line
+    # shows, the bug is downstream: the latest_predictions view, repository.py's SELECT,
+    # or the API/frontend layer — not this function or anything upstream of it.
+    log.info(
+        "severity_trace stage=insert_prediction report_id=%s severity=%s model_version=%s",
+        report_id,
+        row["severity"],
+        model_version,
+    )
+    execute(INSERT_PREDICTION, row)
 
 
 def set_report_status(report_id: str, status: str) -> None:

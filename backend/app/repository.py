@@ -80,9 +80,20 @@ def _rows_from_db() -> list[ReportDetail]:
 
     for row in rows:
         try:
-            reports.append(
-                ReportDetail(**row)
+            report = ReportDetail(**row)
+
+            # SEVERITY TRACE — the value exactly as read back from the latest_predictions
+            # view for this report, joined against the reports table. debug-level: this
+            # runs once per report on every /reports call, so info-level would flood logs.
+            # Compare this against the insert_prediction log line for the same report_id
+            # to isolate a storage bug from a read/view bug.
+            log.debug(
+                "severity_trace stage=repository_read report_id=%s severity=%s",
+                report.report_id,
+                report.severity,
             )
+
+            reports.append(report)
 
         except Exception as exc:
             log.exception(

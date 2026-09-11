@@ -18,7 +18,11 @@ class Settings(BaseSettings):
 
     # Bumped whenever the classification prompt changes. Part of the cache key, so a prompt
     # edit cannot silently serve answers produced by the previous prompt.
-    prompt_version: str = "v5"
+    # v5 -> v6: g3fix5 rebalanced the Gate 3 "IMPORTANT SEVERITY CALIBRATION" block (see
+    # classifier_llm.py and docs/severity-5-bug-investigation.md) after it was found to push
+    # severity to 5 almost unconditionally on live worker reports. Without this bump, reports
+    # with text seen before this fix would keep serving their old, over-scored cached answer.
+    prompt_version: str = "v6"
 
     # TECH_STACK v2: on API failure or timeout, the local baseline answers.
     # Raised from the original 10.0s default - the primary model

@@ -1032,6 +1032,19 @@ def submit_worker_report(
             detail=f"classification unavailable: {exc}",
         ) from exc
 
+    # SEVERITY TRACE (1/3) — this is the value classify() actually returned, before
+    # this route touches it in any way. If this is wrong, the bug is upstream of
+    # routes.py entirely (classifier_llm.py / classifier_base.py / classifier.py).
+    log.info(
+        "severity_trace stage=classifier_outcome report_text_len=%s severity=%s "
+        "is_sif_precursor=%s model_version=%s is_fallback=%s",
+        len(payload.report_text),
+        outcome.result.severity,
+        outcome.result.is_sif_precursor,
+        outcome.model_version,
+        outcome.is_fallback,
+    )
+
     # ------------------------------------------------------------------------
     # STEP 3 — STATIC RECOMMENDED CHECK
     # ------------------------------------------------------------------------
@@ -1043,6 +1056,15 @@ def submit_worker_report(
                 outcome.result.is_sif_precursor,
             )
         }
+    )
+
+    # SEVERITY TRACE (2/3) — model_copy() above only ever touches recommended_check.
+    # This assertion exists so that changes to STEP 3 (or anything above it) that
+    # start also patching severity fail loudly in tests/CI rather than silently
+    # shipping a report with the wrong score.
+    assert result.severity == outcome.result.severity, (
+        f"severity changed between classifier outcome ({outcome.result.severity}) and "
+        f"recommended_check patch ({result.severity}) — STEP 3 must never touch severity"
     )
 
     # ------------------------------------------------------------------------
@@ -1116,6 +1138,18 @@ def submit_worker_report(
         # --------------------------------------------------------------------
         # SAVE CLASSIFICATION
         # --------------------------------------------------------------------
+
+        # SEVERITY TRACE (3/3) — the exact value handed to db.insert_prediction(), i.e.
+        # the last point this codebase controls before it becomes a SQL parameter.
+        # If /reports or Admin Triage later shows something different for this
+        # report_id, the bug is in db.insert_prediction's SQL, the latest_predictions
+        # view, repository.py's SELECT, or the frontend — not in the classify-to-save
+        # path above.
+        log.info(
+            "severity_trace stage=pre_insert_prediction report_id=%s severity=%s",
+            report_id,
+            result.severity,
+        )
 
         db.insert_prediction(
             report_id=report_id,
