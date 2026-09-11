@@ -20,3 +20,26 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
+
+      # ---------------------------------------------------------------------
+      # Not secret, but pinned here so a redeploy cannot silently change what
+      # the classifier does.
+      # ---------------------------------------------------------------------
+
+      # Part of the classification cache key. It MUST move whenever the prompt
+      # moves, or the instance keeps serving answers produced by a prompt we no
+      # longer ship - and the cache has no expiry, so those answers never age
+      # out on their own.
+      #
+      # Bumped to v6 for the Gate 2 absent/unclear clarification (g2fix1).
+      #
+      # If this key is also set in the Render dashboard, the dashboard wins.
+      # Check it: a stale value there silently defeats this file.
+      - key: PROMPT_VERSION
+        value: "v6"
+
+      # The free tier is slower than a laptop and gpt-oss-20b can need well over
+      # ten seconds under load. A premature timeout does not fail loudly - it
+      # discards a good answer and returns the much weaker baseline instead.
+      - key: LLM_TIMEOUT_SECONDS
+        value: "60"
