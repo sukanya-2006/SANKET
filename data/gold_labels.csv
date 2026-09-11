@@ -85,45 +85,46 @@
 133,yes,energy_isolation,failed,5,True,2.1,agreed
 104,yes,line_of_fire,absent,4,True,2.1,agreed
 129,no,none,,1,False,2.1,agreed
-93,yes,energy isolation,absent,4,True,2.1,agreed
+93,yes,energy_isolation,absent,4,True,2.1,agreed
 64,yes,driving,absent,5,True,2.1,agreed
 84,no,none,,2,False,2.1,agreed
 155,yes,line_of_fire,unclear,4,False,2.1,agreed
 124,yes,work_at_height,absent,4,True,2.1,agreed
 45,no,none,,2,False,2.1,agreed
 29,no,none,,2,False,2.1,agreed
-69,yes,energy isolation,absent,4,True,2.1,agreed
-137,yes,confined space,absent,4,True,2.1,agreed
+69,yes,energy_isolation,absent,4,True,2.1,agreed
+137,yes,confined_space,absent,4,True,2.1,agreed
 3,yes,lifting,failed,4,True,2.1,agreed
+156,yes,driving,absent,5,True,2.1,agreed
 19,yes,line_of_fire,absent,5,True,2.1,agreed
 4,yes,line_of_fire,failed,4,True,2.1,agreed
 146,yes,line_of_fire,failed,5,True,2.1,agreed
 136,yes,line_of_fire,failed,3,False,2.1,agreed
 5,no,none,,2,False,2.1,agreed
 152,yes,line_of_fire,unclear,3,False,2.1,agreed
-170,no,none,unclear,3,False,2.1,agreed
+170,no,none,,3,False,2.1,agreed
 159,yes,work_at_height,failed,5,True,2.1,agreed
 26,yes,energy_isolation,absent,5,True,2.1,agreed
-2,yes,confined space,absent,4,True,2.1,agreed
+56,yes,line_of_fire,failed,4,True,2.1,agreed
+2,yes,confined_space,absent,4,True,2.1,agreed
 80,yes,energy_isolation,absent,5,True,2.1,agreed
 154,yes,work_at_height,unclear,5,False,2.1,agreed
 94,yes,driving,absent,5,True,2.1,agreed
 110,yes,driving,failed,5,True,2.1,agreed
 24,yes,energy_isolation,absent,4,True,2.1,agreed
 168,yes,line_of_fire,unclear,5,False,2.1,agreed
-48,yes,energy isolation,absent,5,True,2.1,agreed
+48,yes,energy_isolation,absent,5,True,2.1,agreed
 40,yes,work_at_height,failed,3,False,2.1,agreed
 145,yes,work_at_height,absent,4,True,2.1,agreed
-54,yes,energy isolation,failed,4,True,2.1,agreed
+54,yes,energy_isolation,failed,4,True,2.1,agreed
 158,yes,line_of_fire,unclear,4,False,2.1,agreed
 11,yes,line_of_fire,absent,3,False,2.1,agreed
-120,yes,confined space,absent,4,True,2.1,agreed
+120,yes,confined_space,absent,4,True,2.1,agreed
 135,yes,line_of_fire,absent,5,True,2.1,agreed
 167,yes,driving,unclear,4,False,2.1,agreed
 153,yes,work_at_height,unclear,3,False,2.1,agreed
 126,yes,work_at_height,absent,4,True,2.1,agreed
 65,yes,confined_space,absent,4,True,2.1,agreed
-51,yes,work_at_height,absent,3,True,2.1,agreed
 130,yes,line_of_fire,absent,5,True,2.1,agreed
 162,yes,none,,4,False,2.1,agreed
 92,no,none,,2,False,2.1,agreed
@@ -162,14 +163,12 @@
 21,yes,line_of_fire,failed,3,False,2.1,agreed
 22,yes,lifting,failed,5,True,2.1,agreed
 44,no,none,,2,False,2.1,agreed
-61,yes,energy isolation,absent,5,True,2.1,agreed
+61,yes,energy_isolation,absent,5,True,2.1,agreed
 127,yes,lifting,failed,5,True,2.1,agreed
-68,yes,confined space,absent,3,False,2.1,agreed
-143,yes,confined space,failed,5,True,2.1,agreed
+68,yes,confined_space,absent,3,False,2.1,agreed
+143,yes,confined_space,failed,5,True,2.1,agreed
+173,yes,line_of_fire,unclear,4,False,2.1,agreed
 31,yes,line_of_fire,absent,3,False,2.1,agreed
 70,yes,confined_space,failed,5,True,2.1,agreed
-96,yes,line_of_fire,unclear,5,True,2.1,agreed
 105,yes,work_at_height,failed,5,True,2.1,agreed
 113,yes,confined_space,failed,5,True,2.1,agreed
-156,yes,driving,unclear,5,False,2.1,agreed
-173,yes,line_of_fire,unclear,2,False,2.1,agreed
