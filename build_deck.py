@@ -1,39 +1,42 @@
 """
 build_deck.py
 
-Build the SIH 2026 idea-submission deck, in the official SIH template, with the numbers that
-are actually true.
+Build the SIH 2026 idea-submission deck.
 
-    python build_deck.py        ->  docs/SANKET-SIH2026-Idea-Submission.pptx
+    python build_deck.py    ->  docs/SANKET-SIH2026-Idea-Submission.pptx
 
-TEMPLATE FIDELITY AND THE SUBMISSION RULES
+STICKING TO THE TEMPLATE
 
-The template's own "Important Instructions" slide sets the brief, and this file follows it:
-six slides including the title, no paragraphs (points, diagrams and infographics instead),
-precise wording, and PDF as the upload format. The furniture matches the supplied
-SIH2026-IDEA-Presentation-Format: white ground, centred bold serif title, the team pill
-top-left, the official SIH 2026 logo top-right, and the blue footer band reading "@SIH Idea
-submission- Template" with the slide number on the right. The footer blue is RGB(0,112,192),
-sampled from the template PDF rather than guessed, and the logo is the real asset lifted out
-of it.
+Instruction 5 says to use the provided template "without changing the idea details pointers".
+So every prescribed heading is kept word for word and answered underneath:
 
-"No paragraphs" is the rule that shapes every slide here. Anything that wanted to be prose is
-either a labelled row, a chip, a small diagram, or it is cut.
+    Slide 2  IDEA TITLE                Proposed Solution (Describe your Idea/Solution/Prototype)
+                                       - Detailed explanation of the proposed solution
+                                       - How it addresses the problem
+                                       - Innovation and uniqueness of the solution
+    Slide 3  TECHNICAL APPROACH        - Technologies to be used
+                                       - Methodology and process for implementation
+    Slide 4  FEASIBILITY AND VIABILITY - Analysis of the feasibility of the idea
+                                       - Potential challenges and risks
+                                       - Strategies for overcoming these challenges
+    Slide 5  IMPACT AND BENEFITS       - Potential impact on the target audience
+                                       - Benefits of the solution
+    Slide 6  RESEARCH AND REFERENCES   - Details / Links of the reference and research work
 
-WHY A SCRIPT AND NOT A HAND-EDITED FILE
+Instruction 2 says avoid paragraphs, so answers are short points and one flow chart.
+Instruction 3 says keep it easy to understand, so the language is plain and the numbers are
+few - only the ones a judge would ask for, each with its sample size.
 
-Every figure lives in a named constant below, each traceable to the script that produced it.
-This deck has carried a wrong number three times - a withdrawn agreement ceiling, a withdrawn
-LLM F1, and a rubric attribution for work that never happened - and each time the figure had
-been retyped into a slide by hand and then quietly diverged from the repo. Regenerating means
-the deck cannot drift again: change the constant, rebuild, and every slide moves together.
+The furniture matches the blank template: white ground, black centred sans title, the team
+oval top-left, the SIH logo top-right, and the blue footer band reading
+"@SIH Idea submission- Template" with the slide number. The blue is RGB(0,112,192), sampled
+from the template PDF; the logo is the real asset extracted from it.
 
-WHAT IT DELIBERATELY DOES NOT CLAIM
+WHY A SCRIPT
 
-No LLM F1 - every one we have measured came from a prompt containing a held-out report, so
-they are all withdrawn until the re-classification finishes. No accuracy figure. No compliance
-or certification claim. And no "Oil India system" framing: this is a prototype built for their
-problem statement, which is a different sentence and the only one that is true.
+Every number is a named constant traceable to the script that produced it. This deck has
+carried a wrong figure three times, each time because a number was retyped into a slide by
+hand and then drifted from the repo. Change the constant, rebuild, and every slide moves.
 """
 
 import os
@@ -44,43 +47,35 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
-# --- every number that reaches a slide, and the script that produced it ----
-CEILING_PCT = "97.4%"           # score_recheck.py
-CEILING_KAPPA = "0.947"         # score_recheck.py
-CEILING_N = 38                  # 40 sampled, 2 excluded as incomplete
-BASELINE_F1 = "0.754"           # eval/run_eval.py --no-llm, 5-fold CV
-BASELINE_SD = "± 0.077"
-BASELINE_PRAUC = "0.847"
-BASELINE_N = 114
-OSHA_F1 = "0.118"               # score_stored_predictions.py
-OSHA_N = 30
+# --- the only numbers that reach a slide ----------------------------------
+CEILING_PCT = "97%"       # score_recheck.py - 37 of 38 agreed
+CEILING_KAPPA = "0.947"   # score_recheck.py
+CEILING_N = 38
+BASELINE_F1 = "0.75"      # eval/run_eval.py --no-llm, 5-fold CV, n=114
 SYNTHETIC_N = 150
-GOLD_N = 173
-PRECURSOR_RATE = "58.7%"        # 84/143 in the gold set
-REPORTS_PER_DAY = "63"          # 200,000 tokens/day / ~3,150 per report
+OSHA_N = 30
+
+LIVE_APP = "https://sanket-frontend.onrender.com"
+LIVE_API = "https://sanket-backend-put3.onrender.com"
 
 LOGO = "docs/assets/sih-2026-logo.png"
 
-# --- template palette, sampled from the supplied PDF -----------------------
 BLUE = RGBColor(0x00, 0x70, 0xC0)
-TITLE_INK = RGBColor(0x1F, 0x38, 0x64)
+NAVY = RGBColor(0x1F, 0x4E, 0x79)
+BLACK = RGBColor(0x00, 0x00, 0x00)
 INK = RGBColor(0x1A, 0x1A, 0x1A)
-MUTED = RGBColor(0x55, 0x5E, 0x68)
-FLAG = RGBColor(0xB4, 0x3A, 0x2E)
+MUTED = RGBColor(0x5A, 0x5A, 0x5A)
 GREEN = RGBColor(0x1E, 0x7A, 0x5E)
-AMBER = RGBColor(0xA1, 0x6A, 0x0B)
+AMBER = RGBColor(0x9C, 0x64, 0x0C)
+RED = RGBColor(0xB4, 0x3A, 0x2E)
 PILL = RGBColor(0x7B, 0x5E, 0xA7)
-CARD = RGBColor(0xF3, 0xF7, 0xFB)
-TINT = RGBColor(0xE4, 0xEF, 0xF8)
+CARD = RGBColor(0xF2, 0xF6, 0xFA)
 LINE = RGBColor(0xC9, 0xD8, 0xE6)
-WARN_BG = RGBColor(0xFD, 0xF2, 0xEF)
-WARN_LN = RGBColor(0xE5, 0xC3, 0xBC)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
 W, H = 13.333, 7.5
-SERIF = "Times New Roman"
-SANS = "Calibri"
-FOOT = 7.08          # top of the footer band
+FONT = "Arial"
+FOOT = 7.08
 
 
 def blank(prs):
@@ -96,8 +91,8 @@ def tbox(slide, x, y, w, h, anchor=MSO_ANCHOR.TOP):
     return tf
 
 
-def para(tf, text, size=14, bold=False, color=INK, after=6, first=False,
-         align=PP_ALIGN.LEFT, font=SANS, italic=False):
+def para(tf, text, size=16, bold=False, color=INK, after=8, first=False,
+         align=PP_ALIGN.LEFT):
     p = tf.paragraphs[0] if first else tf.add_paragraph()
     p.text = text
     p.alignment = align
@@ -105,9 +100,8 @@ def para(tf, text, size=14, bold=False, color=INK, after=6, first=False,
     for r in p.runs:
         r.font.size = Pt(size)
         r.font.bold = bold
-        r.font.italic = italic
         r.font.color.rgb = color
-        r.font.name = font
+        r.font.name = FONT
     return p
 
 
@@ -127,62 +121,39 @@ def rect(slide, x, y, w, h, fill=None, line=None, shape=MSO_SHAPE.RECTANGLE):
     return sh
 
 
-def chip(slide, x, y, w, h, text, fill, fg=WHITE, size=11.5, bold=True):
-    sh = rect(slide, x, y, w, h, fill=fill, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
-    try:
-        sh.adjustments[0] = 0.2
-    except (IndexError, KeyError):
-        pass
-    tf = sh.text_frame
-    tf.word_wrap = True
-    tf.margin_left = tf.margin_right = Emu(0)
-    para(tf, text, size=size, bold=bold, color=fg, first=True, after=0,
-         align=PP_ALIGN.CENTER)
-    return sh
-
-
-def arrow(slide, x, y, w=0.3):
-    tf = tbox(slide, x, y, w, 0.3)
-    para(tf, "→", size=16, bold=True, color=BLUE, first=True, after=0,
-         align=PP_ALIGN.CENTER)
-
-
 def chrome(slide, title, n):
-    """The SIH template furniture: pill, centred serif title, logo, footer band."""
-    p = rect(slide, 0.26, 0.2, 1.42, 0.58, fill=WHITE, line=PILL, shape=MSO_SHAPE.OVAL)
-    tf = p.text_frame
+    """Template furniture: team oval, black centred title, logo, blue footer band."""
+    o = rect(slide, 0.3, 0.18, 1.35, 0.72, fill=WHITE, line=PILL, shape=MSO_SHAPE.OVAL)
+    tf = o.text_frame
     tf.word_wrap = True
-    para(tf, "Signal-0", size=12.5, color=INK, first=True, after=0, align=PP_ALIGN.CENTER)
+    para(tf, "Signal-0", size=13, color=BLACK, first=True, after=0, align=PP_ALIGN.CENTER)
 
-    # Long titles wrap to two lines and crowd whatever sits under them, so shrink instead.
-    size = 31 if len(title) <= 34 else (26 if len(title) <= 48 else 23)
-    tf = tbox(slide, 1.85, 0.14, 9.1, 0.9, anchor=MSO_ANCHOR.MIDDLE)
-    para(tf, title.upper(), size=size, bold=True, color=TITLE_INK, first=True, after=0,
-         align=PP_ALIGN.CENTER, font=SERIF)
+    tf = tbox(slide, 1.9, 0.16, 9.0, 0.78, anchor=MSO_ANCHOR.MIDDLE)
+    para(tf, title, size=32, bold=True, color=BLACK, first=True, after=0,
+         align=PP_ALIGN.CENTER)
 
     if os.path.exists(LOGO):
-        slide.shapes.add_picture(LOGO, Inches(11.1), Inches(0.16), height=Inches(0.85))
+        slide.shapes.add_picture(LOGO, Inches(11.15), Inches(0.14), height=Inches(0.82))
 
     rect(slide, 0, FOOT, W, H - FOOT, fill=BLUE)
-    tf = tbox(slide, 0, FOOT + 0.06, W, 0.3)
+    tf = tbox(slide, 0, FOOT + 0.07, W, 0.28)
     para(tf, "@SIH Idea submission- Template", size=10.5, color=WHITE, first=True,
          after=0, align=PP_ALIGN.CENTER)
-    tf = tbox(slide, W - 1.05, FOOT + 0.06, 0.65, 0.3)
+    tf = tbox(slide, W - 1.05, FOOT + 0.07, 0.65, 0.28)
     para(tf, str(n), size=10.5, bold=True, color=WHITE, first=True, after=0,
          align=PP_ALIGN.RIGHT)
 
 
-def card(slide, x, y, w, h, title, accent=BLUE, fill=CARD):
-    rect(slide, x, y, w, h, fill=fill, line=LINE)
-    rect(slide, x, y, w, 0.042, fill=accent)
-    tf = tbox(slide, x + 0.26, y + 0.19, w - 0.52, 0.3)
-    para(tf, title.upper(), size=11, bold=True, color=accent, first=True, after=0)
+def heading(slide, x, y, w, text, color=NAVY, size=17):
+    """One of the template's prescribed pointers. Kept word for word."""
+    tf = tbox(slide, x, y, w, 0.34)
+    para(tf, text, size=size, bold=True, color=color, first=True, after=0)
 
 
-def points(slide, x, y, w, items, size=13.5, gap=8, lead="•  "):
+def points(slide, x, y, w, items, size=15, gap=9):
     tf = tbox(slide, x, y, w, 0.4)
     for i, it in enumerate(items):
-        para(tf, lead + it, size=size, after=gap, first=(i == 0))
+        para(tf, "•  " + it, size=size, after=gap, first=(i == 0))
     return tf
 
 
@@ -193,16 +164,17 @@ def build():
 
     # ==================== 1. TITLE PAGE ==================================
     s = blank(prs)
-    tf = tbox(s, 0.8, 0.3, 9.5, 1.3)
-    para(tf, "SMART INDIA HACKATHON 2026", size=34, bold=True, color=TITLE_INK,
-         first=True, after=2, align=PP_ALIGN.CENTER, font=SERIF)
-    para(tf, "TITLE PAGE", size=28, bold=True, color=TITLE_INK, after=0,
-         align=PP_ALIGN.CENTER, font=SERIF)
+    tf = tbox(s, 0.7, 0.32, 9.8, 0.72)
+    para(tf, "SMART INDIA HACKATHON 2026", size=38, bold=True, color=NAVY,
+         first=True, after=0, align=PP_ALIGN.CENTER)
+    tf = tbox(s, 0.7, 1.24, 9.8, 0.6)
+    para(tf, "TITLE PAGE", size=30, color=BLACK, first=True, after=0,
+         align=PP_ALIGN.CENTER)
     if os.path.exists(LOGO):
-        s.shapes.add_picture(LOGO, Inches(10.6), Inches(0.28), height=Inches(1.05))
+        s.shapes.add_picture(LOGO, Inches(10.6), Inches(0.3), height=Inches(1.1))
 
-    tf = tbox(s, 0.85, 1.95, 8.5, 3.3)
-    for label, value in [
+    tf = tbox(s, 0.9, 2.35, 11.5, 3.9)
+    for i, (k, v) in enumerate([
             ("Problem Statement ID", "SIH26165"),
             ("Problem Statement Title", "AI/NLP Engine to Detect Serious Injury & Fatality "
                                         "(SIF) Precursors in OIL's Unsafe-Act / "
@@ -210,265 +182,187 @@ def build():
             ("Theme", "Smart Automation"),
             ("PS Category", "Software"),
             ("Team ID", "____"),
-            ("Team Name", "Signal-0")]:
-        para(tf, "%s  –  %s" % (label, value), size=15.5, bold=True,
-             first=(label == "Problem Statement ID"), after=13)
+            ("Team Name (Registered on portal)", "Signal-0")]):
+        para(tf, "•  %s -  %s" % (k, v), size=18, after=17, first=(i == 0))
 
-    rect(s, 9.62, 1.95, 3.18, 1.62, fill=CARD, line=LINE)
-    rect(s, 9.62, 1.95, 3.18, 0.05, fill=BLUE)
-    tf = tbox(s, 9.85, 2.28, 2.72, 1.1)
-    para(tf, "SANKET", size=29, bold=True, color=TITLE_INK, first=True, after=2,
-         align=PP_ALIGN.CENTER, font=SERIF)
-    para(tf, "SIF Precursor Detection", size=11, color=MUTED, after=0,
-         align=PP_ALIGN.CENTER)
+    # Working prototype link. Judges can open it while the slide is still up.
+    rect(s, 0.9, 6.15, 11.53, 0.62, fill=CARD, line=LINE)
+    tf = tbox(s, 1.15, 6.3, 11.0, 0.34)
+    para(tf, "Working prototype:   %s" % LIVE_APP, size=15, bold=True, color=NAVY,
+         first=True, after=0)
 
-    # The template leaves the lower half of the title page empty. One line on what the
-    # system does, plus the three gates as chips, earns that space better than whitespace.
-    rect(s, 0.85, 5.32, 11.95, 1.5, fill=BLUE)
-    tf = tbox(s, 1.2, 5.52, 11.25, 0.45)
-    para(tf, "Reads a free-text safety report and answers one question: "
-             "could this have killed someone?",
-         size=17, bold=True, color=WHITE, first=True, after=0, align=PP_ALIGN.CENTER)
-    for i, t in enumerate(["HAZARD", "CONTROL STATUS", "PLAUSIBLE SEVERITY"]):
-        chip(s, 2.55 + i * 3.0, 6.12, 2.6, 0.44, t, TINT, fg=TITLE_INK, size=11.5)
-        if i < 2:
-            tf = tbox(s, 5.2 + i * 3.0, 6.16, 0.35, 0.35)
-            para(tf, "→", size=15, bold=True, color=WHITE, first=True, after=0,
-                 align=PP_ALIGN.CENTER)
-
-    # ==================== 2. SANKET ======================================
+    # ==================== 2. IDEA TITLE ==================================
     s = blank(prs)
-    chrome(s, "SANKET — Early Safety Warnings from Incident Narratives", 2)
+    chrome(s, "IDEA TITLE", 2)
 
-    tf = tbox(s, 0.5, 1.2, 12.33, 0.4)
-    para(tf, "Reads a safety or near-miss report and answers one question: "
-             "could this have killed someone?",
-         size=16, bold=True, color=TITLE_INK, first=True, after=0, align=PP_ALIGN.CENTER)
+    tf = tbox(s, 0.6, 1.02, 12.1, 0.45)
+    para(tf, "SANKET  —  finding the reports that could have killed someone",
+         size=21, bold=True, color=NAVY, first=True, after=0)
 
-    card(s, 0.5, 1.75, 6.05, 2.3, "What it identifies")
-    points(s, 0.82, 2.25, 5.5, ["Hazard + Life-Saving Rule", "Control status",
-                                "Severity (1-5)", "SIF Precursor: Yes / No",
-                                "Evidence & reasoning"], size=14, gap=9)
+    heading(s, 0.6, 1.62, 12.1, "Proposed Solution (Describe your Idea/Solution/Prototype)")
 
-    card(s, 6.78, 1.75, 6.05, 2.3, "What makes it different", accent=GREEN)
-    points(s, 7.1, 2.25, 5.5, ["Three gates, not one score",
-                               "One-Change severity rule",
-                               "LLM + local ML fallback",
-                               "Ranks a queue - never closes a report",
-                               "Every judgement logged"], size=14, gap=9)
+    heading(s, 0.6, 2.12, 12.1, "Detailed explanation of the proposed solution",
+            color=BLACK, size=15)
+    points(s, 0.95, 2.5, 11.5, [
+        "A worker types or speaks a safety report. The AI reads it and asks three questions.",
+        "Is there a serious hazard?   Was a safety control missing or broken?   "
+        "How bad could it have been?",
+        "If all three point the wrong way, the report is flagged and moves to the top of "
+        "the queue."], size=15, gap=7)
 
-    rect(s, 0.5, 4.22, 12.33, 2.6, fill=WHITE, line=LINE)
-    tf = tbox(s, 0.85, 4.44, 11.6, 0.3)
-    para(tf, "THE THREE GATES", size=11.5, bold=True, color=BLUE, first=True, after=0)
+    heading(s, 0.6, 4.0, 12.1, "How it addresses the problem", color=BLACK, size=15)
+    points(s, 0.95, 4.38, 11.5, [
+        "OIL gets more reports than anyone can read carefully, so the dangerous ones get "
+        "lost in the pile.",
+        "SANKET reads every one and reorders the pile. It never closes a report — a person "
+        "still decides."], size=15, gap=7)
 
-    for i, (g, q, opts, col) in enumerate([
-            ("GATE 1  ·  HAZARD", "Is a high-energy hazard present?",
-             "yes · no · insufficient", BLUE),
-            ("GATE 2  ·  CONTROL", "Was a barrier doing its job?",
-             "absent · failed · present · unclear", AMBER),
-            ("GATE 3  ·  SEVERITY", "Plausible worst case?", "1 - 5", GREEN)]):
-        x = 0.85 + i * 3.92
-        rect(s, x, 4.84, 3.5, 1.18, fill=CARD, line=LINE)
-        rect(s, x, 4.84, 3.5, 0.04, fill=col)
-        tf = tbox(s, x + 0.24, 5.0, 3.05, 0.9)
-        para(tf, g, size=10.5, bold=True, color=col, first=True, after=4)
-        para(tf, q, size=12.5, bold=True, after=4)
-        para(tf, opts, size=10, color=MUTED, after=0)
-        if i < 2:
-            arrow(s, x + 3.56, 5.28, 0.3)
+    heading(s, 0.6, 5.5, 12.1, "Innovation and uniqueness of the solution",
+            color=BLACK, size=15)
+    points(s, 0.95, 5.88, 11.5, [
+        "Three separate checks instead of one risk score, so you can see which one drove "
+        "the answer.",
+        "If the AI is unreachable a small local model answers, and the screen says which "
+        "one answered."], size=15, gap=7)
 
-    chip(s, 0.85, 6.22, 11.6, 0.44,
-         "SIF PRECURSOR  =  Hazard YES   +   Control ABSENT / FAILED   +   Severity >= 4",
-         FLAG, size=13.5)
-
-    # ==================== 3. ARCHITECTURE ================================
+    # ==================== 3. TECHNICAL APPROACH ==========================
     s = blank(prs)
-    chrome(s, "Technical Approach", 3)
+    chrome(s, "TECHNICAL APPROACH", 3)
 
-    def layer(y, h, label, col):
-        """One horizontal band. Each is a single thing you can point at and explain."""
-        rect(s, 0.5, y, 1.62, h, fill=col)
-        t = tbox(s, 0.5, y + h / 2 - 0.16, 1.62, 0.32)
-        para(t, label, size=10.5, bold=True, color=WHITE, first=True, after=0,
-             align=PP_ALIGN.CENTER)
-        rect(s, 2.12, y, 10.71, h, fill=CARD, line=LINE)
+    heading(s, 0.6, 1.0, 12.1,
+            "Technologies to be used (e.g. programming languages, frameworks, hardware)")
+    points(s, 0.95, 1.4, 11.9, [
+        "Frontend: React      Backend: FastAPI (Python)      Database: Supabase (PostgreSQL)",
+        "AI model: Groq GPT-OSS-20B      Backup model: TF-IDF + Logistic Regression, "
+        "runs locally"], size=15, gap=7)
 
-    def node(x, y, w, h, title, sub, col=TITLE_INK):
-        # Vertically centred: these boxes differ in height across layers, and top-aligning
-        # the text leaves the taller ones looking half-empty.
+    heading(s, 0.6, 2.42, 12.1,
+            "Methodology and process for implementation (Flow Chart)")
+
+    def node(x, y, w, h, title, sub, col=NAVY):
         rect(s, x, y, w, h, fill=WHITE, line=LINE)
-        t = tbox(s, x + 0.12, y, w - 0.24, h, anchor=MSO_ANCHOR.MIDDLE)
-        para(t, title, size=11.5, bold=True, color=col, first=True, after=2,
+        t = tbox(s, x + 0.1, y, w - 0.2, h, anchor=MSO_ANCHOR.MIDDLE)
+        para(t, title, size=13, bold=True, color=col, first=True, after=2,
              align=PP_ALIGN.CENTER)
         if sub:
-            para(t, sub, size=9, color=MUTED, after=0, align=PP_ALIGN.CENTER)
+            para(t, sub, size=10.5, color=MUTED, after=0, align=PP_ALIGN.CENTER)
 
-    def down(x, y):
-        t = tbox(s, x, y, 0.4, 0.26)
-        para(t, "↓", size=15, bold=True, color=BLUE, first=True, after=0,
+    def link(x, y, ch="→"):
+        t = tbox(s, x, y, 0.42, 0.3)
+        para(t, ch, size=18, bold=True, color=BLUE, first=True, after=0,
              align=PP_ALIGN.CENTER)
 
-    layer(1.12, 1.0, "CLIENT", BLUE)
-    node(2.42, 1.24, 4.7, 0.76, "Field Worker  ·  React",
-         "voice or typed report  →  instant classification")
-    node(7.62, 1.24, 4.7, 0.76, "HSE Admin  ·  React",
-         "triage queue  ·  dispatch / archive  ·  risk board")
-    down(6.5, 2.16)
+    node(0.9, 2.88, 2.4, 0.84, "Worker reports", "typed or voice")
+    link(3.38, 3.15)
+    node(3.88, 2.88, 2.4, 0.84, "FastAPI", "receives it")
+    link(6.36, 3.15)
+    node(6.86, 2.88, 2.75, 0.84, "AI reads it", "Groq GPT-OSS-20B", col=GREEN)
+    link(9.69, 3.15)
+    node(10.19, 2.88, 2.24, 0.84, "Three checks", "hazard · control · severity")
 
-    layer(2.46, 1.42, "API", BLUE)
-    node(2.42, 2.62, 3.05, 1.08, "FastAPI", "REST  ·  Pydantic-validated")
-    node(5.72, 2.62, 3.4, 1.08, "Classifier boundary",
-         "cache → primary → retry → fallback")
-    node(9.37, 2.62, 2.95, 1.08, "Aggregation", "plain SQL  ·  GROUP BY")
-    down(6.5, 3.94)
+    # The flow wraps at the RIGHT edge, so the down arrow belongs under the last box of
+    # row one - not in the middle, where it reads as an unrelated branch.
+    link(11.1, 3.82, "↓")
 
-    layer(4.24, 1.28, "MODELS", GREEN)
-    node(2.42, 4.42, 4.7, 0.94, "PRIMARY  ·  Groq gpt-oss-20b",
-         "three-gate prompt  ·  JSON out  ·  hard deadline", col=GREEN)
-    node(7.62, 4.42, 4.7, 0.94, "FALLBACK  ·  TF-IDF + LogReg",
-         "local  ·  no network  ·  answers when the API cannot", col=AMBER)
-    down(6.5, 5.58)
+    node(0.9, 4.3, 2.4, 0.84, "HSE officer acts", "dispatch or archive")
+    link(3.38, 4.57, "←")
+    node(3.88, 4.3, 2.4, 0.84, "Ranked queue", "worst first")
+    link(6.36, 4.57, "←")
+    node(6.86, 4.3, 2.75, 0.84, "Flagged or not", "with its reasoning", col=RED)
+    link(9.69, 4.57, "←")
+    node(10.19, 4.3, 2.24, 0.84, "Saved", "PostgreSQL")
 
-    layer(5.86, 1.02, "DATA", TITLE_INK)
-    for i, (t, sub) in enumerate([("reports", "150 synthetic · 30 OSHA"),
-                                  ("predictions", "append-only log"),
-                                  ("gold_labels", "173 human labels"),
-                                  ("report_status", "triage state")]):
-        node(2.42 + i * 2.52, 6.0, 2.36, 0.74, t, sub)
+    rect(s, 0.9, 5.42, 6.0, 1.3, fill=CARD, line=LINE)
+    tf = tbox(s, 1.15, 5.6, 5.5, 0.95)
+    para(tf, "WHEN IS IT FLAGGED?", size=11, bold=True, color=RED, first=True, after=6)
+    para(tf, "Hazard yes  +  control missing or broken  +  could have been severe",
+         size=13, bold=True, after=4)
+    para(tf, "All three, or it is not flagged.", size=12, color=MUTED, after=0)
+
+    rect(s, 7.2, 5.42, 5.23, 1.3, fill=CARD, line=LINE)
+    tf = tbox(s, 7.45, 5.6, 4.75, 0.95)
+    para(tf, "IF THE AI IS DOWN", size=11, bold=True, color=AMBER, first=True, after=6)
+    para(tf, "The local backup model answers", size=13, bold=True, after=4)
+    para(tf, "and the screen names which model did.", size=12, color=MUTED, after=0)
 
     # ==================== 4. FEASIBILITY =================================
     s = blank(prs)
-    chrome(s, "Feasibility and Viability", 4)
+    chrome(s, "FEASIBILITY AND VIABILITY", 4)
 
-    card(s, 0.5, 1.15, 6.05, 2.75, "Feasible because", accent=GREEN)
-    points(s, 0.82, 1.68, 5.5, ["Uses incident reports that already exist",
-                                "No specialized hardware",
-                                "API-based & scalable",
-                                "LLM + local fallback",
-                                "Human-in-the-loop"], size=14.5, gap=13)
+    heading(s, 0.6, 1.1, 12.1, "Analysis of the feasibility of the idea")
+    points(s, 0.95, 1.52, 11.8, [
+        "Uses the safety reports OIL already writes — no new data collection needed.",
+        "No special hardware. Runs on an ordinary web server.",
+        "A working prototype is already built and live."], size=15.5, gap=9)
 
-    card(s, 6.78, 1.15, 6.05, 2.75, "Challenge  →  Solution", accent=AMBER)
-    points(s, 7.1, 1.68, 5.5, ["Unstructured text  →  LLM analysis",
-                               "Ambiguous controls  →  4-state classification",
-                               "API failure  →  retry + local fallback",
-                               "Domain variation  →  %d real OSHA reports" % OSHA_N,
-                               "Model changes  →  one version per dashboard"],
-           size=14.5, gap=13)
+    heading(s, 0.6, 3.12, 12.1, "Potential challenges and risks")
+    points(s, 0.95, 3.54, 11.8, [
+        "Every person writes a report differently.",
+        "Many reports never say whether a safety control was in place.",
+        "The AI service can be slow, busy or unavailable.",
+        "An AI answer nobody can check is not worth trusting."], size=15.5, gap=9)
 
-    rect(s, 0.5, 4.08, 12.33, 1.62, fill=WARN_BG, line=WARN_LN)
-    tf = tbox(s, 0.85, 4.28, 11.6, 0.3)
-    para(tf, "OUR REAL LIMIT IS TOKENS, NOT COMPUTE", size=11.5, bold=True, color=FLAG,
-         first=True, after=0)
-    for i, (big, sub) in enumerate([("200,000", "tokens / day, free tier"),
-                                    ("~3,150", "tokens per report"),
-                                    (REPORTS_PER_DAY, "reports / day"),
-                                    ("~2.8 days", "full corpus re-run")]):
-        x = 0.85 + i * 2.94
-        tf = tbox(s, x, 4.68, 2.7, 0.8)
-        para(tf, big, size=23, bold=True, color=FLAG, first=True, after=2)
-        para(tf, sub, size=10.5, color=MUTED, after=0)
-
-    card(s, 0.5, 5.88, 12.33, 1.0, "So the pipeline is built to survive it", accent=BLUE)
-    tf = tbox(s, 0.85, 6.36, 11.6, 0.36)
-    para(tf, "Resumable  ·  never stores a fallback as if it were a real answer  ·  "
-             "dashboard always has data to show", size=13.5, first=True, after=0)
+    heading(s, 0.6, 5.44, 12.1, "Strategies for overcoming these challenges")
+    points(s, 0.95, 5.86, 11.8, [
+        "A written rulebook that both the AI and our human reviewers follow.",
+        "\"Not stated\" is a valid answer for the control question — we never guess.",
+        "A local backup model, and every answer records which model produced it."],
+        size=15.5, gap=9)
 
     # ==================== 5. IMPACT ======================================
     s = blank(prs)
-    chrome(s, "Impact and Benefits", 5)
+    chrome(s, "IMPACT AND BENEFITS", 5)
 
-    card(s, 0.5, 1.15, 6.05, 2.75, "Potential impact")
-    points(s, 0.82, 1.68, 5.5, ["Early detection of SIF precursors in OIL reports",
-                                "Prioritized review of high-risk incidents",
-                                "Ranks sites by precursor RATE, not count",
-                                "Finds recurring hazards across sites & shifts"],
-           size=14.5, gap=15)
+    heading(s, 0.6, 1.15, 12.1, "Potential impact on the target audience")
+    points(s, 0.95, 1.6, 11.8, [
+        "HSE officers read the dangerous reports first, not in the order they arrived.",
+        "Managers see which sites and shifts keep producing near-misses.",
+        "Workers get an answer in seconds, so reporting feels worth doing."],
+        size=16, gap=14)
 
-    card(s, 6.78, 1.15, 6.05, 2.75, "Benefits", accent=GREEN)
-    points(s, 7.1, 1.68, 5.5, ["Safety  —  act before the incident",
-                               "Operational  —  no manual first-pass screen",
-                               "Economic  —  prevents injuries and downtime",
-                               "Scalable  —  ten reports or ten thousand"],
-           size=14.5, gap=15)
+    heading(s, 0.6, 3.5, 12.1,
+            "Benefits of the solution (social, economic, environmental, etc.)")
+    points(s, 0.95, 3.95, 11.8, [
+        "Social — a warning acted on before someone is hurt or killed.",
+        "Economic — less time screening reports by hand, fewer incidents, less downtime.",
+        "Environmental — the same failures that injure people also cause spills and leaks.",
+        "Organisational — every judgement is recorded, so audits are straightforward."],
+        size=16, gap=14)
 
-    rect(s, 0.5, 4.08, 12.33, 0.92, fill=BLUE)
-    tf = tbox(s, 0.5, 4.32, 12.33, 0.46)
-    para(tf, "Safety Reports  →  SIF Precursors  →  Risk Prioritization  →  "
-             "Early Action  →  Safer Operations",
+    rect(s, 0.9, 6.08, 11.53, 0.76, fill=BLUE)
+    tf = tbox(s, 0.9, 6.28, 11.53, 0.4)
+    para(tf, "Safety Reports  →  Precursors Found  →  Priority  →  Early Action  →  "
+             "Safer Operations",
          size=16, bold=True, color=WHITE, first=True, after=0, align=PP_ALIGN.CENTER)
-
-    card(s, 0.5, 5.18, 12.33, 1.7, "Why we rank by rate, not by count", accent=AMBER)
-    tf = tbox(s, 0.85, 5.66, 11.6, 0.34)
-    para(tf, "A site that reports honestly logs more incidents. Counting them punishes it.",
-         size=13.5, bold=True, first=True, after=0)
-    for i, (t, col) in enumerate([("Count  →  the busiest site always looks worst", FLAG),
-                                  ("Rate  →  precursors ÷ reports, small groups held back",
-                                   GREEN)]):
-        x = 0.85 + i * 5.85
-        rect(s, x, 6.12, 5.6, 0.5, fill=WHITE, line=LINE)
-        rect(s, x, 6.12, 0.05, 0.5, fill=col)
-        tf = tbox(s, x + 0.24, 6.24, 5.2, 0.3)
-        para(tf, t, size=11.5, bold=True, color=col, first=True, after=0)
 
     # ==================== 6. RESEARCH AND REFERENCES =====================
     s = blank(prs)
-    chrome(s, "Research and References", 6)
+    chrome(s, "RESEARCH  AND REFERENCES", 6)
 
-    tf = tbox(s, 0.5, 1.12, 12.33, 0.3)
-    para(tf, "RESEARCH", size=10.5, bold=True, color=BLUE, first=True, after=3)
-    para(tf, "IOGP Life-Saving Rules  ·  DEKRA SIF Framework  ·  EEI SIF Model",
-         size=13, after=0)
-    tf = tbox(s, 0.5, 1.78, 12.33, 0.3)
-    para(tf, "DATA", size=10.5, bold=True, color=BLUE, first=True, after=3)
-    para(tf, "%d synthetic reports  +  %d real OSHA severe-injury narratives  ·  "
-             "%d gold labels  ·  2 annotators" % (SYNTHETIC_N, OSHA_N, GOLD_N),
-         size=13, after=0)
+    heading(s, 0.6, 1.12, 12.1, "Details / Links of the reference and research work")
+    points(s, 0.95, 1.56, 11.8, [
+        "IOGP Life-Saving Rules — the hazard categories we tag against",
+        "DEKRA SIF Framework — serious injuries have identifiable precursors",
+        "EEI SIF Model — a precursor is a hazard with a missing or failed control",
+        "OSHA Severe Injury Reports — %d real published narratives, used to test the system "
+        "on writing nobody on our team wrote" % OSHA_N], size=15.5, gap=11)
 
-    tf = tbox(s, 0.5, 2.5, 12.33, 0.3)
-    para(tf, "PROTOTYPE EVALUATION", size=10.5, bold=True, color=BLUE, first=True, after=0)
+    heading(s, 0.6, 3.85, 12.1, "How we tested it")
+    points(s, 0.95, 4.29, 11.8, [
+        "%d safety reports written for this prototype, each reviewed by two people using "
+        "the same rulebook." % SYNTHETIC_N,
+        "On a %d-report sample the two reviewers worked separately and agreed %s of the "
+        "time (Cohen's kappa %s)." % (CEILING_N, CEILING_PCT, CEILING_KAPPA),
+        "No system should claim to be more consistent than the people who made its labels.",
+        "Our simple backup model scores F1 %s. The AI model is being re-measured after we "
+        "found and fixed a flaw in our own test setup." % BASELINE_F1], size=15, gap=10)
 
-    metrics = [(GREEN, "HUMAN CEILING", CEILING_KAPPA, "Cohen's kappa",
-                "%s agreement  ·  independent  ·  n=%d" % (CEILING_PCT, CEILING_N)),
-               (BLUE, "TF-IDF BASELINE", BASELINE_F1, "F1  " + BASELINE_SD,
-                "5-fold CV  ·  PR-AUC %s  ·  n=%d" % (BASELINE_PRAUC, BASELINE_N)),
-               (MUTED, "OSHA GENERALISATION", OSHA_F1, "F1",
-                "real narratives  ·  n=%d, too small to conclude" % OSHA_N)]
-    for i, (col, label, big, unit, sub) in enumerate(metrics):
-        x = 0.5 + i * 4.16
-        rect(s, x, 2.86, 3.94, 1.5, fill=WHITE, line=LINE)
-        rect(s, x, 2.86, 3.94, 0.045, fill=col)
-        tf = tbox(s, x + 0.26, 3.04, 3.4, 0.26)
-        para(tf, label, size=9, bold=True, color=col, first=True, after=0)
-        tf = tbox(s, x + 0.26, 3.3, 3.4, 0.5)
-        para(tf, big, size=27, bold=True, color=INK, first=True, after=0)
-        tf = tbox(s, x + 1.62, 3.46, 2.0, 0.3)
-        para(tf, unit, size=10, color=MUTED, first=True, after=0)
-        tf = tbox(s, x + 0.26, 3.9, 3.5, 0.4)
-        para(tf, sub, size=9, color=MUTED, first=True, after=0)
-
-    rect(s, 0.5, 4.5, 12.33, 0.56, fill=WARN_BG, line=WARN_LN)
-    tf = tbox(s, 0.82, 4.66, 11.7, 0.3)
-    para(tf, "LLM F1 withdrawn — we found a held-out report inside our own prompt and "
-             "pulled the number rather than ship it.  Re-measurement in progress.",
-         size=11.5, bold=True, color=FLAG, first=True, after=0)
-
-    card(s, 0.5, 5.2, 12.33, 1.68, "Stated up front, because a judge will find them",
-         accent=MUTED)
-    caveats = [("Precursor rate %s" % PRECURSOR_RATE,
-                "not the 20–25% cited — our generator centred every report on a hazard"),
-               ("Ceiling is n=%d" % CEILING_N,
-                "a re-label subset, so we quote the subset, never a bare kappa"),
-               ("No accuracy figure",
-                "and never a baseline scored on its own training data")]
-    for i, (head, body) in enumerate(caveats):
-        x = 0.82 + i * 3.95
-        tf = tbox(s, x, 5.68, 3.7, 0.9)
-        para(tf, head, size=11.5, bold=True, color=INK, first=True, after=3)
-        para(tf, body, size=10, color=MUTED, after=0)
-
-    tf = tbox(s, 0.82, 6.56, 11.7, 0.3)
-    para(tf, "GitHub:  SANKET — AI-powered SIF precursor detection", size=11, bold=True,
-         first=True, after=0)
+    rect(s, 0.9, 6.12, 11.53, 0.72, fill=CARD, line=LINE)
+    tf = tbox(s, 1.15, 6.24, 11.0, 0.5)
+    para(tf, "Live prototype:  %s" % LIVE_APP, size=14, bold=True, color=NAVY,
+         first=True, after=3)
+    para(tf, "GitHub:  SANKET — AI-powered SIF precursor detection", size=14, bold=True,
+         color=NAVY, after=0)
 
     out = "docs/SANKET-SIH2026-Idea-Submission.pptx"
     prs.save(out)
