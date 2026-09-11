@@ -48,7 +48,9 @@ BASELINE_SD = "± 0.077"
 BASELINE_N = 114
 SYNTHETIC_N = 150
 OSHA_N = 30
+OSHA_F1 = "0.118"         # score_stored_predictions.py
 GOLD_N = 173
+OPEN_TIEBREAKS = 7        # data/labeling_disagreements.csv
 
 LIVE_APP = "https://sanket-frontend.onrender.com"
 
@@ -321,7 +323,7 @@ def build():
 
     tiers = [
         ("CLIENT", "React SPA", "worker screen  ·  admin triage", BLUE),
-        ("API", "FastAPI on Render", "REST  ·  validation  ·  auth-ready", NAVY),
+        ("API", "FastAPI on Render", "REST  ·  Pydantic validation  ·  CORS", NAVY),
         ("MODELS", "Groq GPT-OSS-20B", "with local TF-IDF fallback", GREEN),
         ("DATA", "Supabase PostgreSQL", "reports · predictions · labels", PURPLE),
     ]
@@ -358,7 +360,7 @@ def build():
         ["Unstructured text", "LLM reads it against a written rubric"],
         ["Ambiguous controls", "4-state classification, silence ≠ absent"],
         ["API failure or rate limit", "Retry inside a deadline, then local model"],
-        ["Domain variation", "Validated on %d real OSHA reports" % OSHA_N],
+        ["Domain variation", "Tested on %d real OSHA reports - F1 %s, an honest gap" % (OSHA_N, OSHA_F1)],
         ["Model version changes", "Dashboard scopes to one version at a time"],
     ], size=11.5, row_h=0.45)
 
@@ -406,16 +408,18 @@ def build():
     tf = tbox(s, 0.5, 3.82, 12.33, 0.3)
     para(tf, "MEASURED ON OUR PROTOTYPE DATA", size=12, bold=True, color=NAVY,
          first=True, after=0)
-    table(s, 0.5, 4.18, 12.33, [3.4, 2.6, 6.33], [
+    table(s, 0.5, 4.12, 12.33, [3.4, 2.6, 6.33], [
         ["What", "Value", "Meaning"],
-        ["Reports processed end to end", "%d" % (SYNTHETIC_N + OSHA_N),
+        ["Labelled corpus", "%d reports" % (SYNTHETIC_N + OSHA_N),
          "%d written for the prototype + %d real OSHA narratives"
          % (SYNTHETIC_N, OSHA_N)],
-        ["Human labels collected", "%d" % GOLD_N,
-         "every report reviewed by two people against one rubric"],
+        ["Human reviews", "%d" % (2 * (SYNTHETIC_N + OSHA_N)),
+         "every report read by two people against one written rubric"],
+        ["Agreed gold labels", "%d" % GOLD_N,
+         "%d reports still being adjudicated" % OPEN_TIEBREAKS],
         ["Reviewer agreement", "%s  (kappa %s)" % (CEILING_PCT, CEILING_KAPPA),
          "on a %d-report sample reviewed independently" % CEILING_N],
-    ], size=12, row_h=0.44)
+    ], size=11.5, row_h=0.4)
 
     rect(s, 0.5, 6.12, 12.33, 0.72, fill=BLUE)
     tf = tbox(s, 0.5, 6.32, 12.33, 0.36)
