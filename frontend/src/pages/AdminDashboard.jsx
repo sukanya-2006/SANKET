@@ -94,16 +94,16 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#dce4e1] text-[#2c3e37] p-4 md:p-8">
       {/* Top Bar */}
-      <div className="max-w-6xl mx-auto flex justify-between items-center mb-8">
-        <div className="flex items-center gap-4">
-          <Link to="/admin/triage" className="p-2 bg-white/80 rounded-xl hover:bg-white transition-colors shadow-sm">
+      <div className="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-3 mb-6 md:mb-8">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <Link to="/admin/triage" className="shrink-0 p-2 bg-white/80 rounded-xl hover:bg-white transition-colors shadow-sm">
             <ArrowLeft className="w-5 h-5 text-[#354f52]" />
           </Link>
-          <h1 className="text-2xl font-bold text-[#2f3e46]">Executive Risk Dashboard</h1>
+          <h1 className="text-lg md:text-2xl font-bold text-[#2f3e46] truncate">Executive Risk Dashboard</h1>
         </div>
-        <Link
-          to="/"
-          className="text-xs font-semibold text-[#354f52] hover:underline bg-white/60 px-3 py-1.5 rounded-full"
+        <Link 
+          to="/" 
+          className="shrink-0 text-xs font-semibold text-[#354f52] hover:underline bg-white/60 px-3 py-1.5 rounded-full"
         >
           Sign Out / Home
         </Link>
