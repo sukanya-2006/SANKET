@@ -30,16 +30,16 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#dce4e1] text-[#2c3e37] p-4 md:p-8">
       {/* Top Bar */}
-      <div className="max-w-6xl mx-auto flex justify-between items-center mb-8">
-        <div className="flex items-center gap-4">
-          <Link to="/admin/triage" className="p-2 bg-white/80 rounded-xl hover:bg-white transition-colors shadow-sm">
+      <div className="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-3 mb-6 md:mb-8">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <Link to="/admin/triage" className="shrink-0 p-2 bg-white/80 rounded-xl hover:bg-white transition-colors shadow-sm">
             <ArrowLeft className="w-5 h-5 text-[#354f52]" />
           </Link>
-          <h1 className="text-2xl font-bold text-[#2f3e46]">Executive Risk Dashboard</h1>
+          <h1 className="text-lg md:text-2xl font-bold text-[#2f3e46] truncate">Executive Risk Dashboard</h1>
         </div>
         <Link 
           to="/" 
-          className="text-xs font-semibold text-[#354f52] hover:underline bg-white/60 px-3 py-1.5 rounded-full"
+          className="shrink-0 text-xs font-semibold text-[#354f52] hover:underline bg-white/60 px-3 py-1.5 rounded-full"
         >
           Sign Out / Home
         </Link>
@@ -89,27 +89,27 @@ export default function AdminDashboard() {
 
           {/* Site Risk Ranking Chart Container */}
           <div className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] shadow-xl border border-white/50">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">Site Risk Density Ranking</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+              <div className="min-w-0">
+                <h2 className="text-base md:text-lg font-bold text-slate-800">Site Risk Density Ranking</h2>
                 <p className="text-xs text-slate-500">Comparing precursor frequency across operational sectors.</p>
               </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#354f52] bg-[#52796f]/10 px-3 py-1.5 rounded-xl">
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#354f52] bg-[#52796f]/10 px-3 py-1.5 rounded-xl whitespace-nowrap">
                 <BarChart3 className="w-4 h-4" /> Live Aggregates
               </div>
             </div>
 
-            <div className="h-72 w-full">
+            <div className="h-64 sm:h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sites.length ? sites : [
                   { site: 'Duliajan Field', count: 18 },
                   { site: 'Naharkatia', count: 14 },
                   { site: 'Moran Well-12', count: 9 },
                   { site: 'Jorhat Depot', count: 5 }
-                ]} layout="vertical">
+                ]} layout="vertical" margin={{ left: 0, right: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                  <XAxis type="number" stroke="#94a3b8" fontSize={12} />
-                  <YAxis dataKey="site" type="category" stroke="#475569" fontSize={12} width={110} />
+                  <XAxis type="number" stroke="#94a3b8" fontSize={11} />
+                  <YAxis dataKey="site" type="category" stroke="#475569" fontSize={11} width={90} tick={{ width: 84 }} />
                   <Tooltip contentStyle={{ backgroundColor: '#1e293b', color: '#fff', borderRadius: '12px', border: 'none' }} />
                   <Bar dataKey="count" fill="#354f52" radius={[0, 8, 8, 0]} />
                 </BarChart>
