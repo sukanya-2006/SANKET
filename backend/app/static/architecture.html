@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How SANKET is built: the path a safety report takes, what happens when the language model fails, and the database constraint that computes the precursor flag.">
+<meta name="robots" content="index, follow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ctext y=%2713%27 font-size=%2713%27%3E%E2%9B%91%3C/text%3E%3C/svg%3E">
+
+<meta property="og:type" content="article">
+<meta property="og:title" content="SANKET Architecture">
+<meta property="og:description" content="How SANKET is built: the path a safety report takes, what happens when the language model fails, and the database constraint that computes the precursor flag.">
+<meta property="og:url" content="https://sanket-backend-put3.onrender.com/architecture">
+<meta name="twitter:card" content="summary">
+
+<style>
+  html { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>SANKET Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;600&display=swap">
+
+<style>
+  /* ---------------------------------------------------------------
+     Drafting-sheet palette. Light is the base; the two dark blocks
+     below redefine only tokens, never components.
+     --------------------------------------------------------------- */
+  :root {
+    --paper:    #EDEFEC;
+    --surface:  #F9FAF8;
+    --sunk:     #E3E7E2;
+    --ink:      #17262C;
+    --ink-2:    #55645F;
+    --ink-3:    #7C8A85;
+    --rule:     #C6CFC9;
+    --rule-2:   #DCE2DD;
+    --accent:   #0C6B57;
+    --accent-w: #DCEBE4;
+    --warn:     #8A5E0B;
+    --warn-w:   #F3E9D4;
+    --flag:     #A33227;
+    --flag-w:   #F4E0DC;
+
+    --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --f-body:    "Source Sans 3", system-ui, -apple-system, sans-serif;
+    --f-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:    #0F1A1D;
+      --surface:  #172428;
+      --sunk:     #1D2E33;
+      --ink:      #DDE6E1;
+      --ink-2:    #9BAAA4;
+      --ink-3:    #74847E;
+      --rule:     #2E4046;
+      --rule-2:   #243439;
+      --accent:   #45AE8F;
+      --accent-w: #14322C;
+      --warn:     #D3A247;
+      --warn-w:   #33290F;
+      --flag:     #DC7C6B;
+      --flag-w:   #36211D;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:    #0F1A1D;
+    --surface:  #172428;
+    --sunk:     #1D2E33;
+    --ink:      #DDE6E1;
+    --ink-2:    #9BAAA4;
+    --ink-3:    #74847E;
+    --rule:     #2E4046;
+    --rule-2:   #243439;
+    --accent:   #45AE8F;
+    --accent-w: #14322C;
+    --warn:     #D3A247;
+    --warn-w:   #33290F;
+    --flag:     #DC7C6B;
+    --flag-w:   #36211D;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 76rem;
+    margin: 0 auto;
+    padding-inline: 16px;
+    padding-block: 28px 40px;
+  }
+
+  /* The drawing sheet's double border. */
+  .frame {
+    border: 1px solid var(--rule);
+    outline: 1px solid var(--rule);
+    outline-offset: 4px;
+    background: var(--surface);
+  }
+
+  /* ---------------- header ---------------- */
+  header {
+    padding: 30px clamp(18px, 3.5vw, 40px) 26px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 6vw, 3.3rem);
+    line-height: 1.02;
+    letter-spacing: -0.018em;
+    margin: 10px 0 0;
+    text-wrap: balance;
+  }
+
+  h1 .sub {
+    display: block;
+    font-size: clamp(0.95rem, 2.2vw, 1.18rem);
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--ink-2);
+    margin-top: 12px;
+    max-width: 62ch;
+    line-height: 1.45;
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .links a {
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    text-decoration: none;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 7px 12px;
+    display: inline-flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .links a:hover { border-color: var(--accent); color: var(--accent); }
+  .links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .links a b {
+    font-weight: 600;
+    color: var(--ink-3);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .links a:hover b { color: var(--accent); }
+
+  /* ---------------- sections ---------------- */
+  section {
+    display: grid;
+    grid-template-columns: 3.4rem 1fr;
+    gap: 0 18px;
+    padding: 30px clamp(18px, 3.5vw, 40px) 34px;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  section:last-of-type { border-bottom: 0; }
+
+  .code {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    padding-top: 5px;
+    border-top: 2px solid var(--accent);
+    align-self: start;
+  }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(1.22rem, 3vw, 1.55rem);
+    letter-spacing: -0.008em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede {
+    color: var(--ink-2);
+    max-width: 66ch;
+    margin: 8px 0 24px;
+  }
+
+  .body > :last-child { margin-bottom: 0; }
+
+  /* ---------------- numbered path ---------------- */
+  ol.path {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--rule-2);
+  }
+
+  ol.path li {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 4px 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--rule-2);
+    align-items: baseline;
+  }
+
+  ol.path .n {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  ol.path .what {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1rem;
+  }
+
+  ol.path .how {
+    grid-column: 2;
+    color: var(--ink-2);
+    font-size: 0.94rem;
+    max-width: 68ch;
+  }
+
+  ol.path .how code, .how code { font-family: var(--f-mono); font-size: 0.87em; color: var(--ink); }
+
+  /* ---------------- classifier flow ---------------- */
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .track { display: grid; gap: 12px; align-content: start; }
+
+  .track > .tlabel {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--rule-2);
+  }
+
+  .node {
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 13px 15px;
+  }
+  .node.ok   { border-left: 3px solid var(--accent); }
+  .node.warn { border-left: 3px solid var(--warn); background: var(--warn-w); }
+
+  .node h3 {
+    font-family: var(--f-display);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: 0.01em;
+  }
+  .node p { margin: 0; font-size: 0.9rem; color: var(--ink-2); }
+  .node .spec {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    margin-top: 7px;
+    display: block;
+  }
+
+  .drop {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    padding-left: 13px;
+    position: relative;
+  }
+  .drop::before {
+    content: "";
+    position: absolute;
+    left: 3px; top: -2px; bottom: -2px;
+    border-left: 1px solid var(--rule);
+  }
+  .drop.w { color: var(--warn); }
+  .drop.w::before { border-left-style: dashed; border-color: var(--warn); }
+
+  .verdict {
+    margin-top: 18px;
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--flag);
+    background: var(--flag-w);
+    padding: 14px 16px;
+    font-size: 0.94rem;
+  }
+  .verdict b { font-family: var(--f-display); font-weight: 600; }
+
+  /* ---------------- tables ---------------- */
+  .scroll { overflow-x: auto; max-width: 100%; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    min-width: 34rem;
+  }
+
+  th {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: left;
+    padding: 0 14px 8px 0;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 14px 10px 0;
+    border-bottom: 1px solid var(--rule-2);
+    vertical-align: top;
+    color: var(--ink-2);
+  }
+  td:first-child { color: var(--ink); font-weight: 600; }
+  td.m, th.m { font-family: var(--f-mono); font-size: 0.85rem; font-weight: 400; }
+  tr:last-child td { border-bottom: 0; }
+
+  .verb {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+    background: var(--sunk);
+  }
+  .verb.post  { color: var(--accent); border-color: var(--accent); background: var(--accent-w); }
+  .verb.patch { color: var(--warn); border-color: var(--warn); background: var(--warn-w); }
+
+  /* ---------------- code block ---------------- */
+  pre {
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  pre .k { color: var(--accent); font-weight: 600; }
+  pre .c { color: var(--ink-3); }
+
+  .note {
+    font-size: 0.92rem;
+    color: var(--ink-2);
+    max-width: 66ch;
+    margin: 0;
+  }
+  .note strong { color: var(--ink); font-weight: 600; }
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ---------------- title block ---------------- */
+  .titleblock {
+    border-top: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+  .titleblock div {
+    padding: 12px clamp(14px, 2.5vw, 22px);
+    border-right: 1px solid var(--rule-2);
+  }
+  .titleblock div:last-child { border-right: 0; }
+  .titleblock dt {
+    font-family: var(--f-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 3px;
+  }
+  .titleblock dd {
+    margin: 0;
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+
+  @media (max-width: 640px) {
+    section { grid-template-columns: 1fr; gap: 12px; }
+    .code { border-top: 0; padding-top: 0; }
+    .flow { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+<div class="frame">
+
+  <header>
+    <p class="eyebrow">Signal-0 &nbsp;·&nbsp; SIH26165 &nbsp;·&nbsp; Oil India Limited</p>
+    <h1>SANKET
+      <span class="sub">An engine that reads an unsafe-act, unsafe-condition or near-miss
+        report and answers one question: could this have killed someone? This sheet is how it
+        is built, end to end.</span>
+    </h1>
+    <div class="links">
+      <a href="https://sanket-frontend.onrender.com" target="_blank" rel="noopener">
+        <b>Live</b> sanket-frontend.onrender.com</a>
+      <a href="https://sanket-backend-put3.onrender.com/health" target="_blank" rel="noopener">
+        <b>API health</b> /health</a>
+      <a href="https://github.com/sukanya-2006/SANKET" target="_blank" rel="noopener">
+        <b>Code</b> github.com/sukanya-2006/SANKET</a>
+    </div>
+  </header>
+
+  <!-- ============================ A ============================ -->
+  <section>
+    <div class="code">A</div>
+    <div class="body">
+      <h2>The path a report takes</h2>
+      <p class="lede">Seven steps, in order, from a worker on site to a re-ordered queue on a
+        safety officer's screen. Nothing here runs on a schedule; every step is triggered by
+        the one before it.</p>
+
+      <ol class="path">
+        <li><span class="n">01</span><span class="what">Worker writes or speaks the report</span>
+          <span class="how">React screen. Typing is the normal path. Speech exists because a
+            worker at a wellhead has gloves on.</span></li>
+        <li><span class="n">02</span><span class="what">Speech becomes text</span>
+          <span class="how"><code>POST /transcribe</code> sends the audio to Whisper
+            (<code>whisper-large-v3</code>). Skipped entirely when the report was typed.</span></li>
+        <li><span class="n">03</span><span class="what">The API validates the payload</span>
+          <span class="how"><code>POST /reports/worker</code>. Pydantic rejects a malformed
+            body before any model sees it.</span></li>
+        <li><span class="n">04</span><span class="what">One call crosses the classifier boundary</span>
+          <span class="how"><code>classify(report_text)</code>. Everything above this line is
+            unaware of which model answered. Section B is what happens below it.</span></li>
+        <li><span class="n">05</span><span class="what">The verdict is appended, never updated</span>
+          <span class="how">A new row in <code>predictions</code>, stamped with the model
+            version that produced it. Re-classifying a report adds a row; it does not
+            overwrite the old one.</span></li>
+        <li><span class="n">06</span><span class="what">The newest verdict per report is selected</span>
+          <span class="how">The <code>latest_predictions</code> view. A sibling view scopes to
+            a single model version, so a prompt change cannot half-populate a dashboard.</span></li>
+        <li><span class="n">07</span><span class="what">The queue re-orders and a person decides</span>
+          <span class="how">Admin triage lists by date, then by severity within a date. The
+            officer dispatches or archives. SANKET never closes a report.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============================ B ============================ -->
+  <section>
+    <div class="code">B</div>
+    <div class="body">
+      <h2>The classifier boundary, and what happens when the model fails</h2>
+      <p class="lede">This is the part worth arguing about. A hosted language model is a
+        network call that can hang, rate-limit, or return something that is not the shape you
+        asked for. All three are handled, and the system says out loud when it has degraded.</p>
+
+      <div class="flow">
+        <div class="track">
+          <div class="tlabel">Normal path</div>
+
+          <div class="node ok">
+            <h3>1 &nbsp; Cache lookup</h3>
+            <p>Keyed on the report text. A repeated report never pays for a second API call.</p>
+            <span class="spec">SQLite, on-instance</span>
+          </div>
+          <div class="drop">miss ↓</div>
+
+          <div class="node ok">
+            <h3>2 &nbsp; Primary classifier</h3>
+            <p>Reads the narrative against the written rubric and returns the three gates plus
+              its reasoning.</p>
+            <span class="spec">Groq gpt-oss-20b · hard deadline 60 s</span>
+          </div>
+          <div class="drop">valid ↓</div>
+
+          <div class="node ok">
+            <h3>3 &nbsp; Cached, then returned</h3>
+            <p>Stored under the exact model version that produced it.</p>
+            <span class="spec">is_fallback = false</span>
+          </div>
+        </div>
+
+        <div class="track">
+          <div class="tlabel">Degraded path</div>
+
+          <div class="drop w">schema rejected → retry once</div>
+          <div class="drop w">rejected again, raised, or timed out ↓</div>
+
+          <div class="node warn">
+            <h3>4 &nbsp; Baseline classifier</h3>
+            <p>A local model, trained on the gold labels. No network, no API key, answers in
+              milliseconds.</p>
+            <span class="spec">TF-IDF + logistic regression</span>
+          </div>
+          <div class="drop w">↓</div>
+
+          <div class="node warn">
+            <h3>5 &nbsp; Returned, and flagged</h3>
+            <p>The interface says <em>degraded mode &mdash; keyword baseline</em> in plain
+              words. It does not quietly serve a worse answer.</p>
+            <span class="spec">is_fallback = true · not cached</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="verdict">
+        <b>A degraded answer is never written to the cache.</b> The cache has no expiry, so
+        storing a fallback would pin it to that report permanently: every later call returns it
+        instantly, with no error and no log line. One bad minute from the model would become a
+        silent downgrade with no way back. Recomputing next time is the system recovering,
+        which is the entire point of having a degraded mode.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ C ============================ -->
+  <section>
+    <div class="code">C</div>
+    <div class="body">
+      <h2>The label is computed, not typed</h2>
+      <p class="lede">A precursor flag is the conjunction of three gates. That rule lives in
+        the database as a constraint, so no prompt revision, no migration and no careless
+        insert can redefine what the word means.</p>
+
+      <pre><span class="c">-- predictions table</span>
+<span class="k">CONSTRAINT</span> precursor_requires_all_three_gates <span class="k">CHECK</span> (
+    is_sif_precursor = (
+        hazard_assessment = <span class="k">'yes'</span>
+        <span class="k">AND</span> control_status <span class="k">IN</span> (<span class="k">'absent'</span>, <span class="k">'failed'</span>)
+        <span class="k">AND</span> severity &gt;= 4
+    )
+)</pre>
+      <p class="note">A second constraint enforces the rubric's other rule: a control status
+        may only be recorded when a hazard was actually identified. <strong>Silence is not
+        evidence of absence</strong> &mdash; a report that names no barrier is
+        <code>unclear</code>, not <code>absent</code>.</p>
+    </div>
+  </section>
+
+  <!-- ============================ D ============================ -->
+  <section>
+    <div class="code">D</div>
+    <div class="body">
+      <h2>What is stored</h2>
+      <p class="lede">Five tables and two views. The split between machine verdicts and human
+        labels is deliberate: they are never mixed, which is what makes measuring the model
+        against people possible at all.</p>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th class="m">Relation</th><th>Holds</th><th>Why it is shaped this way</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="m">sites</td>
+              <td>The site taxonomy</td>
+              <td>Referenced by reports, so a typo cannot invent a new site.</td>
+            </tr>
+            <tr>
+              <td class="m">reports</td>
+              <td>The narratives themselves</td>
+              <td>Each row is tagged <code>synthetic</code>, <code>osha</code> or
+                <code>worker</code>, so no result can blur written-for-the-prototype data with
+                real narratives.</td>
+            </tr>
+            <tr>
+              <td class="m">predictions</td>
+              <td>One row per classification</td>
+              <td>Append-only and version-stamped. The history of what the model used to think
+                survives every prompt change.</td>
+            </tr>
+            <tr>
+              <td class="m">gold_labels</td>
+              <td>Human judgements</td>
+              <td>One row per annotator per report, plus a tiebreak row that records
+                <em>which</em> gate the two disagreed on.</td>
+            </tr>
+            <tr>
+              <td class="m">report_status</td>
+              <td>Triage state</td>
+              <td><code>active</code>, <code>dispatched</code> or <code>archived</code>. Kept
+                apart from the verdict, because a human decision is not a model output.</td>
+            </tr>
+            <tr>
+              <td class="m">latest_predictions</td>
+              <td>View</td>
+              <td>The newest verdict per report, which is what every dashboard reads.</td>
+            </tr>
+            <tr>
+              <td class="m">latest_predictions_<wbr>by_version</td>
+              <td>View</td>
+              <td>The same, scoped to one model version, so a partly re-classified corpus
+                cannot empty a dashboard.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ E ============================ -->
+  <section>
+    <div class="code">E</div>
+    <div class="body">
+      <h2>The stack</h2>
+      <p class="lede">Nothing exotic, and nothing that needs a GPU. Every piece was chosen so
+        that a team of six could finish it and a judge could read it.</p>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Layer</th><th>Technology</th><th>Doing what</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Client</td><td class="m">React (Vite)</td>
+              <td>Two screens: a worker analyzer and an admin triage board.</td></tr>
+            <tr><td>API</td><td class="m">FastAPI · Pydantic</td>
+              <td>REST, schema validation on every request and response.</td></tr>
+            <tr><td>Primary model</td><td class="m">Groq gpt-oss-20b</td>
+              <td>Reads the narrative against the three-gate rubric.</td></tr>
+            <tr><td>Speech</td><td class="m">Whisper large-v3</td>
+              <td>Spoken reports become text before anything classifies them.</td></tr>
+            <tr><td>Fallback model</td><td class="m">scikit-learn · TF-IDF + LogReg</td>
+              <td>Local, offline, always available. Answers when the API cannot.</td></tr>
+            <tr><td>Database</td><td class="m">PostgreSQL (Supabase)</td>
+              <td>Reports, predictions, labels and triage state.</td></tr>
+            <tr><td>Cache</td><td class="m">SQLite</td>
+              <td>On-instance, keyed by report text, skipped for degraded answers.</td></tr>
+            <tr><td>Hosting</td><td class="m">Render</td>
+              <td>Client and API deployed separately. The browser never holds a database key.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ F ============================ -->
+  <section>
+    <div class="code">F</div>
+    <div class="body">
+      <h2>API surface</h2>
+      <p class="lede">Small on purpose. Six of these exist only to feed the dashboard's
+        aggregate views, and all of them are plain SQL over the latest-verdict view.</p>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Method</th><th class="m">Route</th><th>Returns</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="verb">GET</span></td><td class="m">/health</td>
+              <td>Liveness, and which data source is actually serving.</td></tr>
+            <tr><td><span class="verb">GET</span></td><td class="m">/meta</td>
+              <td>Rubric version, model version, schema-rejection counters.</td></tr>
+            <tr><td><span class="verb post">POST</span></td><td class="m">/analyze</td>
+              <td>Classify a narrative without storing it. The demo path.</td></tr>
+            <tr><td><span class="verb post">POST</span></td><td class="m">/reports/worker</td>
+              <td>Submit a real report: validate, classify, store.</td></tr>
+            <tr><td><span class="verb post">POST</span></td><td class="m">/transcribe</td>
+              <td>Audio in, text out.</td></tr>
+            <tr><td><span class="verb">GET</span></td><td class="m">/reports</td>
+              <td>The triage queue, filterable by status and date.</td></tr>
+            <tr><td><span class="verb">GET</span></td><td class="m">/reports/{id}</td>
+              <td>One report with its latest verdict and the reasoning behind it.</td></tr>
+            <tr><td><span class="verb patch">PATCH</span></td><td class="m">/reports/{id}/status</td>
+              <td>Dispatch or archive. The only route that records a human decision.</td></tr>
+            <tr><td><span class="verb">GET</span></td><td class="m">/aggregate/&hellip;</td>
+              <td>summary · sites · activities · rules · shifts · trend.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ G ============================ -->
+  <section>
+    <div class="code">G</div>
+    <div class="body">
+      <h2>Two decisions that shape everything else</h2>
+
+      <div class="pair">
+        <div class="node ok">
+          <h3>Rank by rate, not by count</h3>
+          <p>A site that reports honestly logs more incidents. Counting them punishes it, and
+            the busiest site always looks worst. The dashboard ranks by precursors divided by
+            reports, with small groups held back from the top.</p>
+        </div>
+        <div class="node ok">
+          <h3>The system ranks; a person decides</h3>
+          <p>There is no route that closes a report on the model's say-so. The only thing
+            SANKET changes is the order a safety officer reads them in.</p>
+        </div>
+      </div>
+
+      <p class="note">Both are load-bearing. The first is why the risk board is usable at a
+        company where reporting culture varies by site. The second is why a wrong verdict costs
+        a few minutes of attention rather than a missed hazard.</p>
+    </div>
+  </section>
+
+  <dl class="titleblock">
+    <div><dt>Project</dt><dd>SANKET</dd></div>
+    <div><dt>Team</dt><dd>Signal-0</dd></div>
+    <div><dt>Problem statement</dt><dd>SIH26165</dd></div>
+    <div><dt>Organisation</dt><dd>Oil India Limited</dd></div>
+    <div><dt>Sheet</dt><dd>Architecture</dd></div>
+    <div><dt>Drawn from</dt><dd>the source, not the deck</dd></div>
+  </dl>
+
+</div>
+</div>
+</body>
+</html>

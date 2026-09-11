@@ -7,6 +7,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from . import classifier, db
 from .api.routes import router
@@ -35,6 +36,26 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+
+# The architecture write-up, served from the API so it has a public URL that needs no
+# build step and no dashboard action. The static site would be the tidier home for it,
+# but that service does not redeploy on push; this one does, so this is the copy that
+# actually stays current.
+_ARCHITECTURE = Path(__file__).resolve().parent / "static" / "architecture.html"
+
+
+@app.get("/architecture", response_class=HTMLResponse, include_in_schema=False,
+         tags=["meta"])
+def architecture() -> HTMLResponse:
+    """Read from disk per request - it is one small file, and an edit should not need a
+    restart to show up."""
+    try:
+        return HTMLResponse(_ARCHITECTURE.read_text(encoding="utf-8"))
+    except OSError as exc:
+        log.error("architecture page unavailable: %s", exc)
+        return HTMLResponse("<h1>Not found</h1>", status_code=404)
+
 
 # Plug the real classifier into the primary slot. Without this, classifier.py keeps using
 # the stub no matter how many times classifier_llm is imported.
