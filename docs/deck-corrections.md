@@ -74,9 +74,10 @@ Prototype Evaluation:
 ● LLM: re-measurement in progress — the prompt it was scored under contained
   a held-out report, so the previous figure is withdrawn
 ● OSHA generalisation: F1 0.118 (n=30 — too small to conclude from)
-● Labels: 180 reports, two annotators, written rubric (v2.1 for both rounds).
-  Round 1, independent: 52% agreement, kappa 0.083. Round 2: 96%, but not run
-  independently — so we quote neither as a ceiling.
+● Human ceiling: 97.4% agreement, Cohen's kappa 0.947 — two annotators,
+  independent, rubric v2.2, on a 38-report subset
+● Labels: 180 reports, two annotators. Round 1, independent: 52%, kappa 0.083,
+  under v2.1. Round 2: 96%, not independent — quoted as neither.
 ```
 
 ### Why this ordering is the strongest version
@@ -140,10 +141,4 @@ A team that can say which gate is failing and why has demonstrably measured its 
 **`median_triage_seconds`** from `/aggregate/summary`. The synthetic reports carry generated
 timestamps, so it measures the generator, not the system.
 
-**Cohen's kappa 0.922, as a ceiling.** Settled on 11 September: round two was not run
-independently — the annotators worked differently the second time, so 0.922 measures agreement
-reached with contact, not two independent judgements. The slide keeps the 96% only where it
-belongs — beside the round-one figure it improved on, marked *not independent* — and the kappa
-stays off the deck entirely. A fresh independent re-label of a ~40-report subset, no contact
-between annotators, is a couple of hours' work and gives a kappa we can quote without a caveat.
-Nothing short of that turns 0.922 into a ceiling.
+**Cohen's kappa 0.922, as a ceiling.** That was round two, which was not run independently. It is not a ceiling and never was. The real one is **0.947**, from the 38-report independent re-check on 11 September — quote that, with its sample size.

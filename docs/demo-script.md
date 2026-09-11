@@ -119,7 +119,7 @@ Six seconds of slack. That is intentional — you will lose more than that to th
 
 *Round two was not independent, so it is not a ceiling — 96.1% and kappa 0.922 are evidence the
 what two people scored, credited to nothing — both rounds used the same rubric, so the revision
-cannot claim the jump. If a judge asks for a ceiling: we do not have one yet.
+cannot claim the jump. If a judge asks for a ceiling: 97.4 percent, kappa point nine four seven, on a thirty-eight report independent subset.
 The fix is a fresh independent pass over a forty-report subset, and we would rather quote that
 number than one we cannot defend.*
 

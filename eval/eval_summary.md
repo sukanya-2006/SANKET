@@ -14,6 +14,44 @@ python agreement.py                       # round two agreement, not independent
 
 ---
 
+## We have a ceiling now
+
+**11 September.** Both annotators independently re-labelled a 40-report subset under rubric
+v2.2, with no contact until both files were finished. Reproduce with `python score_recheck.py`.
+
+| | agreement | kappa |
+|---|---|---|
+| **`is_sif_precursor`** | **37/38 — 97.4%** | **0.947** |
+| `lsr_rule` | 38/38 — 100% | 1.000 |
+| Gate 2 `control_status` | 36/37 — 97.3% | 0.956 |
+| Gate 3 `severity`, exact | 36/38 — 94.7% | 0.926 |
+| Gate 3 `severity`, within one band | 38/38 — 100% | — |
+| Gate 1 `hazard_assessment` | 37/38 — 97.4% | n/a |
+
+Exactly **one** headline disagreement in 38 reports: report 46, severity 3 against 4, on the
+boundary that defines the label.
+
+**Gate 1's kappa is suppressed, not zero.** Both annotators answered `yes` on 37 of 38, so
+there is almost no variance for chance agreement to be measured against, and kappa collapses
+toward zero at near-total agreement. Printing 0.000 there would read as total disagreement and
+be exactly backwards. Raw agreement is 97.4%.
+
+### Two caveats to say before a judge asks
+
+**n = 38.** The confidence interval is wide. Quote it as "on a 38-report independent subset",
+never as a flat 0.947.
+
+**These are re-labels.** Both annotators had seen these reports in earlier rounds, so
+familiarity flatters the number against two people reading them cold. It is a genuine ceiling
+for *this* pair applying *this* rubric; it is not a claim about how legible the task is to a
+stranger.
+
+Two rows were excluded as incomplete rather than guessed at: akanksha left report 3 blank and
+sukanya left report 52's severity blank. A missing judgement is not a disagreement, and
+counting it either way would move the number.
+
+---
+
 ## The one number to quote
 
 | | F1 | how it was measured | n |
@@ -57,7 +95,8 @@ Budget the re-run in days, not minutes — see the rate limit note at the end.
 
 ### The honest position until then
 
-We have a cross-validated baseline at 0.754 and no current LLM figure. That is a worse table
+We have a cross-validated baseline at 0.754, an independent human ceiling of kappa 0.947,
+and no current LLM figure. That is a worse table
 than the one we had this morning and a much better answer under questioning, because every
 number in it survives the follow-up question.
 
@@ -93,9 +132,8 @@ a number to beat.
 
 The gold set stands at 173 agreed reports, with 7 still open (10, 20, 51, 60, 96, 139, 149).
 
-A quotable kappa needs a fresh independent pass. `prepare_independent_recheck.py` samples 40
-reports for exactly that, and the worksheets are already written to `data/recheck_akanksha.csv`
-and `data/recheck_sukanya.csv`.
+That fresh independent pass has now been run - see the ceiling section at the top of this
+file. kappa 0.947 on 38 scorable reports, under rubric v2.2.
 
 ---
 
