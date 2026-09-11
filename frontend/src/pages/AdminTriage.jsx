@@ -16,7 +16,9 @@ import { ShieldAlert, ArrowLeft, RefreshCw, X, AlertTriangle, CheckCircle2, Arch
 //     minute: '2-digit'
 //   });
 // };
-
+const isLiveWorkerReport = (report) => {
+  return String(report.report_id || '').startsWith('worker-');
+};
 
 const formatDateTime = (dateString) => {
   if (!dateString) return 'Just now';
@@ -60,30 +62,93 @@ export default function AdminTriage() {
 
   const [activeTab, setActiveTab] = useState('active'); // 'active', 'dispatched', or 'archived'
 
+  // const fetchReports = async (currentOffset = 0) => {
+  //   setLoading(true);
+  //   try {
+  //     const data = await api.getReports(100, currentOffset);
+  //     const items = Array.isArray(data) ? data : data.items || [];
+
+  //     const sortedReports = items.sort((a, b) => {
+  //       const scoreA = a.severity_score || a.severity || 0;
+  //       const scoreB = b.severity_score || b.severity || 0;
+
+  //       if (scoreB !== scoreA) return scoreB - scoreA;
+
+  //       const dateA = new Date(a.created_at || a.timestamp || 0).getTime();
+  //       const dateB = new Date(b.created_at || b.timestamp || 0).getTime();
+  //       return dateB - dateA;
+  //     });
+
+  //     setReports(sortedReports);
+  //   } catch (err) {
+  //     console.error('Failed to load reports:', err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+
   const fetchReports = async (currentOffset = 0) => {
-    setLoading(true);
-    try {
-      const data = await api.getReports(100, currentOffset);
-      const items = Array.isArray(data) ? data : data.items || [];
+  setLoading(true);
 
-      const sortedReports = items.sort((a, b) => {
-        const scoreA = a.severity_score || a.severity || 0;
-        const scoreB = b.severity_score || b.severity || 0;
+  try {
+    const data = await api.getReports(100, currentOffset);
 
-        if (scoreB !== scoreA) return scoreB - scoreA;
+    const items = Array.isArray(data)
+      ? data
+      : data.items || [];
 
-        const dateA = new Date(a.created_at || a.timestamp || 0).getTime();
-        const dateB = new Date(b.created_at || b.timestamp || 0).getTime();
-        return dateB - dateA;
-      });
+    // ------------------------------------------------
+    // ONLY SHOW LIVE WORKER-SUBMITTED REPORTS
+    // ------------------------------------------------
+    const liveReports = items.filter(isLiveWorkerReport);
 
-      setReports(sortedReports);
-    } catch (err) {
-      console.error('Failed to load reports:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // ------------------------------------------------
+    // SORT: HIGHEST SEVERITY FIRST, THEN NEWEST
+    // ------------------------------------------------
+    const sortedReports = [...liveReports].sort((a, b) => {
+      const severityA =
+        Number(a.severity_score ?? a.severity ?? 0);
+
+      const severityB =
+        Number(b.severity_score ?? b.severity ?? 0);
+
+      // Higher severity first
+      if (severityB !== severityA) {
+        return severityB - severityA;
+      }
+
+      // Newest first
+      const dateA = new Date(
+        a.created_at || a.report_date || 0
+      ).getTime();
+
+      const dateB = new Date(
+        b.created_at || b.report_date || 0
+      ).getTime();
+
+      return dateB - dateA;
+    });
+
+    console.log(
+      'LIVE WORKER REPORTS:',
+      sortedReports
+    );
+
+    setReports(sortedReports);
+
+  } catch (err) {
+    console.error(
+      'Failed to load live reports:',
+      err
+    );
+
+    setReports([]);
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchReports(0);
@@ -184,7 +249,8 @@ export default function AdminTriage() {
               ) : (
                 displayedReports.map((report, idx) => {
                   const isPrecursor = report.is_sif_precursor || report.is_sif;
-                  const severityScore = report.severity_score || report.severity || 0;
+                  const severityScore =
+                  Number(report.severity_score ?? report.severity ?? 0);
                   const status = report.status || 'active';
 
                   return (
@@ -195,7 +261,13 @@ export default function AdminTriage() {
                     >
                       <td className="py-4 px-6 text-slate-500 font-medium whitespace-nowrap flex items-center gap-2">
                         <Clock className="w-3.5 h-3.5 opacity-70" />
-                        {formatDateTime(report.report_date)}
+                        {/* {formatDateTime(
+                       report.created_at ||
+                       report.report_date ||
+                         report.timestamp
+                       )} */}
+
+                       {formatDateTime(report.created_at)}
                       </td>
                       <td className="py-4 px-6 font-medium text-slate-700 max-w-sm truncate">
                         {report.report_text || report.text || 'No description provided'}
@@ -238,10 +310,10 @@ export default function AdminTriage() {
               {selectedReport.status === 'archived' && <><Archive className="w-6 h-6 text-slate-500" /> Archived Incident Log</>}
               {(!selectedReport.status || selectedReport.status === 'active') && <><AlertTriangle className="w-6 h-6 text-amber-500" /> Incident Analysis Report</>}
             </h2>
-            <p className="text-sm text-slate-500 font-medium mb-6 flex items-center gap-2">
-               <Clock className="w-4 h-4" /> Reported on {formatDateTime(selectedReport.created_at || selectedReport.timestamp)}
-            </p>
-
+             <p className="text-sm text-slate-500 font-medium mb-6 flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+                Reported on {formatDateTime(selectedReport.created_at)}
+              </p>
             <div className="space-y-6">
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Original Field Report</p>
