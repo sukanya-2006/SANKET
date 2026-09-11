@@ -16,9 +16,7 @@ import { ShieldAlert, ArrowLeft, RefreshCw, X, AlertTriangle, CheckCircle2, Arch
 //     minute: '2-digit'
 //   });
 // };
-const isLiveWorkerReport = (report) => {
-  return String(report.report_id || '').startsWith('worker-');
-};
+
 
 const formatDateTime = (dateString) => {
   if (!dateString) return 'Just now';
@@ -101,13 +99,11 @@ export default function AdminTriage() {
     // ------------------------------------------------
     // ONLY SHOW LIVE WORKER-SUBMITTED REPORTS
     // ------------------------------------------------
-    const liveReports = items.filter(isLiveWorkerReport);
 
     // ------------------------------------------------
     // SORT: HIGHEST SEVERITY FIRST, THEN NEWEST
     // ------------------------------------------------
-    const sortedReports = [...liveReports].sort((a, b) => {
-      const severityA =
+const sortedReports = [...items].sort((a, b) => {      const severityA =
         Number(a.severity_score ?? a.severity ?? 0);
 
       const severityB =
