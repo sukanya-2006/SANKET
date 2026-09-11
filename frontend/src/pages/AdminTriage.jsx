@@ -101,6 +101,7 @@ export default function AdminTriage() {
   const [total, setTotal] = useState(null);
 
   const [activeTab, setActiveTab] = useState('active'); // 'active', 'dispatched', or 'archived'
+  const [dayFilter, setDayFilter] = useState('');
 
   // const fetchReports = async (currentOffset = 0) => {
   //   setLoading(true);
@@ -132,7 +133,10 @@ export default function AdminTriage() {
     setLoading(true);
 
     try {
-      const data = await api.getReports(PAGE_SIZE, currentOffset);
+      const data = await api.getReports(PAGE_SIZE, currentOffset, {
+        status: activeTab,
+        reportDate: dayFilter || undefined,
+      });
 
       const items = Array.isArray(data)
         ? data
@@ -171,9 +175,15 @@ export default function AdminTriage() {
     }
   };
 
+    // Changing tab or day is a new query, not a filter over what is already loaded, so the
+  // offset has to reset or page 2 of `active` becomes page 2 of `archived`.
   useEffect(() => {
+    setReports([]);
+    setTotal(null);
     fetchReports(0);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dayFilter]);
+
 
   const handleAction = async () => {
     const isPrecursor = selectedReport.is_sif_precursor || selectedReport.is_sif;
@@ -194,10 +204,10 @@ export default function AdminTriage() {
     }
   };
 
-  const displayedReports = reports.filter((report) => {
-    const status = report.status || 'active';
-    return status === activeTab;
-  });
+  // The server already scoped this page to the active tab, so there is nothing left to
+  // filter here. Re-filtering would silently drop rows whose status changed between the
+  // fetch and the render.
+  const displayedReports = reports;
 
   return (
     <div className="min-h-screen bg-[#dce4e1] text-[#2c3e37] p-4 md:p-8 relative">
@@ -221,10 +231,30 @@ export default function AdminTriage() {
       <div className="max-w-6xl mx-auto bg-white/90 backdrop-blur-xl rounded-[2rem] shadow-xl border border-white/50 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">Incident Reports</h2>
+            {/* One day at a time, with the risk ranking intact inside the day. This is the
+                day-wise view - the queue itself stays sorted by risk, because 209 reports
+                span 101 dates and 60 of those hold a single report. */}
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-lg font-bold text-slate-800">Incident Reports</h2>
+              <input
+                type="date"
+                value={dayFilter}
+                onChange={(e) => setDayFilter(e.target.value)}
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-600"
+                title="Show a single day, worst first"
+              />
+              {dayFilter && (
+                <button
+                  onClick={() => setDayFilter('')}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-700 underline"
+                >
+                  clear
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-500">
               Sorted by Severity, then by Newest.
-              {total !== null && ` Showing ${reports.length} of ${total} reports - ${displayedReports.length} in this tab.`}
+              {total !== null && ` Showing ${reports.length} of ${total}${dayFilter ? ` on ${dayFilter}` : ''}.`}
             </p>
           </div>
 

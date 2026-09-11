@@ -142,11 +142,23 @@ export const api = {
   // ----------------------------------------
   // ADMIN TRIAGE - GET REPORTS
   // ----------------------------------------
-  getReports: async (limit = 20, offset = 0) => {
+  // `status` and `reportDate` are filtered SERVER-side.
+  //
+  // The triage screen used to fetch one page and filter its three tabs in the browser, so a
+  // dispatched report that happened to sit past the page boundary vanished from every tab -
+  // it was in the database, on no screen. Filtering server-side means each tab paginates over
+  // its own full result set, and `total` is the count for that tab rather than for everything.
+  //
+  // reportDate is 'YYYY-MM-DD'. It gives the day-at-a-time view with the risk ranking intact
+  // inside the day, which is why the queue itself is not sorted by date - 209 reports span 101
+  // dates and 60 of those hold a single report.
+  getReports: async (limit = 20, offset = 0, { status, reportDate } = {}) => {
 
-    const res = await fetch(
-      `${BASE_URL}/reports?limit=${limit}&offset=${offset}`
-    );
+    const params = new URLSearchParams({ limit, offset });
+    if (status) params.set('status', status);
+    if (reportDate) params.set('report_date', reportDate);
+
+    const res = await fetch(`${BASE_URL}/reports?${params}`);
 
     return handleResponse(res);
   },
