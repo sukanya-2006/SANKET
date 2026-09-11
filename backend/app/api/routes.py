@@ -1104,7 +1104,7 @@ def submit_worker_report(
             {
                 "report_id": report_id,
                 "report_text": payload.report_text,
-                "source": "synthetic",
+                "source": "worker",
                 "site": payload.site,
                 "activity": payload.activity,
                 "shift": payload.shift,
