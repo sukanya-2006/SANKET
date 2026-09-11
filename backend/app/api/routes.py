@@ -32,6 +32,7 @@ from ..schemas import (
     LSRRule,
     ReportDetail,
     ReportPage,
+    ReportStatus,
     RuleControlBucket,
     ShiftAggregate,
     SiteAggregateResponse,
@@ -361,6 +362,8 @@ def reports(
     lsr_rule: LSRRule | None = None,
     site: str | None = None,
     source: str | None = None,
+    status: ReportStatus | None = Query(None, description="active | dispatched | archived"),
+    report_date: date | None = Query(None, description="one day, YYYY-MM-DD"),
     q: str | None = None,
 
 ) -> ReportPage:
@@ -376,6 +379,8 @@ def reports(
         ),
         site=site,
         source=source,
+        status=status,
+        report_date=report_date.isoformat() if report_date else None,
         q=q,
     )
 

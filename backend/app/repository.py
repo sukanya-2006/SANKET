@@ -152,6 +152,8 @@ def list_reports(
     lsr_rule: str | None = None,
     site: str | None = None,
     source: str | None = None,
+    status: str | None = None,
+    report_date: str | None = None,
     q: str | None = None,
 ) -> tuple[list[ReportSummary], int]:
 
@@ -186,6 +188,27 @@ def list_reports(
             if r.source == source
         ]
 
+    # Triage state. The admin screen filtered its three tabs client-side over a single page of
+    # results, so a dispatched report past the page boundary vanished from every tab.
+    if status:
+        items = [
+            r for r in items
+            if (r.status or "active") == status
+        ]
+
+    # A single day, for "here is what came in today, worst first".
+    #
+    # This is the day-at-a-time view, and it is why the queue itself does not sort by date:
+    # 209 reports span 101 distinct dates and 60 of those hold exactly one report, so
+    # date-major ordering would be mostly groups of one, with nothing for severity to order
+    # inside them. Filtering to a date and keeping the risk ranking within it gives the same
+    # reading order without fragmenting the other hundred days.
+    if report_date:
+        items = [
+            r for r in items
+            if str(r.report_date) == report_date
+        ]
+
     if q:
         needle = q.lower()
 
@@ -202,14 +225,30 @@ def list_reports(
     # Then newest report
     # -----------------------------------------------------------------------
 
+    # Precursors first, then severity, then NEWEST first.
+    #
+    # The date key used to be ascending, so a report submitted thirty seconds ago sorted LAST
+    # among everything sharing its precursor flag and severity. "Submit a report, then find it
+    # in the queue" is the first thing anyone tries, and with 209 reports it landed past the
+    # end of the first page - the report was there, and unreachable.
+    #
+    # Negating the ordinal rather than reversing the whole tuple keeps the first two keys
+    # pointing the way they already did: `reverse=True` would also flip precursors to the
+    # bottom and severity to ascending.
+    #
+    # Risk stays the primary key, deliberately. Sorting by date first was considered and the
+    # data rules it out: 209 reports span 101 distinct dates, 60 of which hold exactly one
+    # report, so date-major grouping produces mostly groups of one and severity inside them
+    # orders nothing. It would also make this a chronological log with local sorting, which is
+    # what every system we are trying to improve on already does. The ranked order is the
+    # product. Use the `report_date` filter for a day-at-a-time view instead.
     items = sorted(
         items,
         key=lambda r: (
             not bool(r.is_sif_precursor),
             -(r.severity or 0),
-            r.report_date,
+            -r.report_date.toordinal(),
         ),
-        reverse=False,
     )
 
     total = len(items)
