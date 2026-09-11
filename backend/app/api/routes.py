@@ -300,16 +300,25 @@ def submit_worker_report(
 
         traceback.print_exc()
 
+        # This endpoint is unauthenticated and the worker screen alert()s
+        # `detail` raw. A psycopg failure spells out the database host, the
+        # port and the postgres.<project-ref> username - the Supabase
+        # project identifier - so the exception text stays in the log and
+        # the caller gets only a reference to quote back to an operator.
+
+        error_ref = uuid.uuid4().hex[:8]
+
         log.exception(
-            "FAILED TO SAVE WORKER REPORT %s",
+            "FAILED TO SAVE WORKER REPORT %s (ref %s)",
             report_id,
+            error_ref,
         )
 
         raise HTTPException(
             status_code=500,
             detail=(
-                f"Failed to save worker report: "
-                f"{type(exc).__name__}: {exc}"
+                f"Failed to save worker report. "
+                f"Reference {error_ref}."
             ),
         ) from exc
 
@@ -487,16 +496,24 @@ def update_report_status(
 
         traceback.print_exc()
 
+        # Same reason as the worker-report handler above: nothing here
+        # authenticates the caller, and a psycopg error names the Supabase
+        # host and the postgres.<project-ref> user. Log it, return a
+        # reference.
+
+        error_ref = uuid.uuid4().hex[:8]
+
         log.exception(
-            "FAILED TO UPDATE REPORT STATUS %s",
+            "FAILED TO UPDATE REPORT STATUS %s (ref %s)",
             report_id,
+            error_ref,
         )
 
         raise HTTPException(
             status_code=500,
             detail=(
-                f"Failed to update report status: "
-                f"{type(exc).__name__}: {exc}"
+                f"Failed to update report status. "
+                f"Reference {error_ref}."
             ),
         ) from exc
 

@@ -19,12 +19,12 @@ Banned synonyms that keep creeping back: ~~category~~, ~~hazard_category~~, ~~ba
 
 ## Classification — two classifiers, deliberately
 - **Baseline:** scikit-learn, TF-IDF → logistic regression, ~30 lines. Explainability: top-weighted words via `sorted(zip(vec.get_feature_names_out(), model.coef_[0]))`. No SHAP.
-- **Real classifier:** one structured Claude API call per report returning the full locked schema: `hazard_assessment` (yes / no / insufficient_information), `lsr_rule` (8 IOGP categories + none), `control_status` (absent / failed / present / unclear), `severity` (1–5), `is_sif_precursor`, `confidence` (float 0–1 — required for PR-AUC), `flagged_phrases`, `reasoning`. Validated by Pydantic; on failure retry once, then baseline fallback + human-review flag, rate logged.
+- **Real classifier:** one structured Groq API call per report (`openai/gpt-oss-20b`) returning the full locked schema: `hazard_assessment` (yes / no / insufficient_information), `lsr_rule` (8 IOGP categories + none), `control_status` (absent / failed / present / unclear), `severity` (1–5), `is_sif_precursor`, `confidence` (float 0–1 — required for PR-AUC), `flagged_phrases`, `reasoning`. Validated by Pydantic; on failure retry once, then baseline fallback + human-review flag, rate logged.
 - Both share one boundary: `classify(text) -> ClassificationResult`. Backend never knows which is inside.
 - The baseline-vs-LLM gap is the strongest differentiator. Baseline is built and scored FIRST.
 
 ## Multilingual
-Inside the Claude prompt (Hindi/Hinglish/code-mixed). No separate pipeline. A handful of code-mixed reports sit in the dataset to prove it.
+Inside the gpt-oss-20b prompt (Hindi/Hinglish/code-mixed). No separate pipeline. A handful of code-mixed reports sit in the dataset to prove it.
 
 ## Aggregation (v1.1 — rate-based, not count-based)
 Plain SQL only. Endpoints:
@@ -93,7 +93,7 @@ sif-detector/
 3. The live text box, first screen, with the offline fallback behind it.
 
 ## Cost
-Free tiers throughout; ~500 Claude calls across dev + demo. Budget ₹1,000 (₹500 is optimistic once prompt-tuning re-runs are counted). Still effectively free.
+Free tiers throughout, so the binding constraint is not money. Groq’s free tier allows 200,000 tokens per day and one report costs ~3,150 tokens, which is about **63 reports a day** — dev, prompt-tuning re-runs and the demo all have to fit under that daily ceiling. The cache (keyed on report text + prompt_version) is what keeps re-runs over already-seen reports from spending any of it.
 
 ---
 *Changelog (labelling correction): the round-two agreement figures (96.1% / kappa 0.922) were previously carried as an inter-annotator ceiling. Round two was not run independently, so that reading was wrong and is withdrawn — the figures stay, labelled as evidence the v2.2 rubric revision worked. The independent number is round one: 52.2% / 0.083. `run_eval.py` no longer prints a human-ceiling line.*

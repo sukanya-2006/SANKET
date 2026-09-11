@@ -14,39 +14,52 @@ python agreement.py                       # round two agreement, not independent
 
 ---
 
-## The numbers to quote
+## The one number to quote
 
 | | F1 | how it was measured | n |
 |---|---|---|---|
-| **LLM, prompt g2fix1** | **0.822** | held out; the model never saw the labels | 71 |
-| LLM, previous prompt | 0.776 | same method, before the Gate 2 fix | 65 |
 | **TF-IDF baseline** | **0.754** ± 0.077 | 5-fold cross-validated, refit inside each fold | 114 |
 
-Baseline PR-AUC is 0.847 ± 0.032. LLM precision is 0.857, recall 0.789.
+PR-AUC 0.847 ± 0.032. This one is sound: the baseline never saw the prompt, so nothing that
+happened to the prompt affects it.
 
-**The LLM is ahead of the baseline, and the gap is widening as the prompt is fixed.** It was
-*behind* on 9 September (0.719 against 0.784). Both moves came from finding and fixing our own
-prompt bugs, not from changing the model.
+### The LLM number is retracted. Do not quote 0.822 or 0.776.
 
-### Say this before anyone asks
+Both were measured under prompts that contained part of their own answer key.
 
-The rows are **not scored on the same pool**. The baseline is cross-validated over 114 reports;
-the LLM is scored on the reports that have both a gold label and a stored prediction under that
-prompt version. Treat the gap as indicative rather than decisive.
+The Gate 3 worked example about a two-foot fall onto a steel floor was **report 113 nearly
+verbatim**, and it instructed the model to score that report 2. Report 113 is in the
+**held-out** split, and its gold label is severity 5, `is_sif_precursor` true. So the prompt
+guaranteed a wrong answer on a scored report, and `docs/hostile-qa.md` rehearsed the line "we
+opened the held-out set exactly once".
 
-### The labels
+A second leak sat six lines below an instruction forbidding it. The prompt said "You have no
+reliable information about the base rate of the set you are reading" and then, parenthetically,
+"our own labelled set runs at roughly 59% precursors". `docs/eval-diagnosis.md` records that
+paragraph as removed. It was not removed — the wrong number had been swapped for the right one.
+Telling a model the base rate of the set it is scored against is leakage whether the number is
+right or wrong, and it is most of the 0.719 → 0.822 move.
 
-180 reports, two annotators, a written and versioned rubric.
+Both are gone. `classify.version` is now `...-clean1`.
 
-Round one was run independently and agreed **52.2%**, Cohen's kappa 0.083. Severity was the
-gate that split them — 14.4% agreement, 3 to 4 points apart on 76 of 180 reports. That drove
-the v2.1 → v2.2 revision, which rewrote exactly that gate.
+### What it takes to get an LLM number back
 
-Round two agreed **96.1%**, but was **not run independently**, so it is not a ceiling and we do
-not quote it as one. It is evidence the revision worked.
+```bash
+python batch_classify.py            # re-classify under clean1
+python score_stored_predictions.py  # now excludes the dev split
+```
 
-We therefore have no quotable agreement ceiling. `prepare_independent_recheck.py` samples 40
-reports for a fresh independent pass, which is about two hours and would give us one.
+`score_stored_predictions.py` previously had no concept of `eval/split.json`, so 14 of the 73
+scored reports were dev reports the prompt was tuned on. It loads the split now and prints the
+pool size before and after excluding them.
+
+Budget the re-run in days, not minutes — see the rate limit note at the end.
+
+### The honest position until then
+
+We have a cross-validated baseline at 0.754 and no current LLM figure. That is a worse table
+than the one we had this morning and a much better answer under questioning, because every
+number in it survives the follow-up question.
 
 ---
 
@@ -59,6 +72,15 @@ Round one was independent: two annotators labelled 180 reports separately and ag
 That triggered a documented rubric revision, **v2.1 → v2.2**, rewriting the severity gate: the
 one-change rule is stated first, and the bands were changed from adjectives to observable
 outcomes.
+
+> **OPEN QUESTION — unresolved.** Every one of the 173 rows in `data/gold_labels.csv` records
+> `rubric_version` **2.1**; none records 2.2. The attribution above, and the 52.2% → 96.1%
+> story everywhere else in this file, credits the improvement to v2.2. Rubric §10.6 is explicit
+> that labels made under two versions are not the same measurement, so this is not a typo we
+> can wave through. We have not edited the labels, because we do not know which document round
+> two was actually run against — guessing would invent the provenance. Whoever ran round two
+> has to say, and the column has to be corrected to match. Until then the v2.2 attribution is
+> unconfirmed.
 
 Round two scored 96.1% agreement, kappa 0.922 — **round two, not independent, not a ceiling**.
 The annotators did not work separately the second time, so those numbers are evidence that the
@@ -79,15 +101,19 @@ The deck currently carries **LLM F1 0.719** and a footnote that 5 of 114 predict
 fallback. Both come from a run under prompt **v3**, which is not what we ship.
 
 v3's Gate 3 section told the model that "roughly one in five" reports escalate to a fatal or
-life-altering outcome. Our synthetic set runs at 58.7%, because the generator centred every
-report on a hazard category. The model obeyed the instruction and was marked wrong for it —
-82% of its misses were severity scored below 4 where the humans scored 4 or above.
+life-altering outcome. Our synthetic set runs at 58.7% — 84 of the 143 synthetic reports in
+the gold set — because the generator centred every report on a hazard category. The model
+obeyed the instruction and was marked wrong for it — 82% of its misses were severity scored
+below 4 where the humans scored 4 or above.
 
-That paragraph is gone. The calibration is now close to right:
+That paragraph is gone. The calibration is now close to right. Both columns below are the
+**scored subset** — the synthetic reports that had a stored prediction under the previous
+prompt, the n=65 row in the table at the top of this file — which is why the gold column here
+is not the 58.7% measured over all 143:
 
 | | gold | model |
 |---|---|---|
-| synthetic precursor rate | 64.6% | 66.2% |
+| synthetic precursor rate, scored subset | 64.6% | 66.2% |
 
 Mean severity shift is **+0.28** — very slightly high, where it used to be −0.28 low.
 
@@ -157,8 +183,9 @@ is the first question an ML judge asks.
 timestamps, so this measures the generator, not the system.
 
 **The 20–25% precursor rate from the problem statement, as a property of our data.** Ours runs
-at 58.7% because the generator centred every synthetic report on a hazard category. Say that
-first, with the reason, rather than letting a judge find it.
+at 58.7% — 84 of the 143 synthetic reports in the gold set — because the generator centred
+every synthetic report on a hazard category. Say that first, with the reason, rather than
+letting a judge find it.
 
 ---
 
@@ -170,7 +197,7 @@ prompt is ~2,650 tokens and `max_tokens` is 500, so one report costs ~3,150 agai
 | | |
 |---|---|
 | reports per day | **~63** |
-| full 180-report pass | ~520,000 tokens, about 2.6 days |
+| full 180-report pass | ~567,000 tokens, about 2.8 days |
 
 `batch_classify.py` paces at 25s, refuses to store a fallback, and is resumable and
 version-aware, so an interrupted run picks up exactly where the cap stopped it. Plan re-runs

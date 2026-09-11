@@ -28,7 +28,7 @@ health check at `/health`.
 ```
 Environment variables — set in the Render dashboard, never in the repo:
   SUPABASE_DB_URL     from Supabase > Project Settings > Database > Connection string (URI)
-  ANTHROPIC_API_KEY   once Member 2's classifier lands
+  GROQ_API_KEY        the classifier calls Groq; with no key it serves the baseline
   CORS_ORIGINS        the Vercel URL, comma-separated
 ```
 

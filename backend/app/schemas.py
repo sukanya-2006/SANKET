@@ -62,6 +62,32 @@ class ClassificationResult(BaseModel):
     recommended_check: str | None = None
 
 
+def derive_precursor(
+    hazard_assessment: HazardAssessment | str | None,
+    control_status: ControlStatus | str | None,
+    severity: float | None,
+) -> bool:
+    """The rubric v2.2 §6 decision table — the single definition every classifier derives from.
+
+    No classifier sets `is_sif_precursor` itself. schema.sql's `precursor_requires_all_three_gates`
+    CHECK recomputes exactly this expression, so a flag reached any other way makes the row
+    unstorable — and only the flagged rows, the ones that matter. The baseline used to return a
+    true flag beside `control_status = unclear`, which the CHECK reads as false, so every precursor
+    it found was rejected on insert.
+
+    Takes enum members or their raw string values: the LLM classifier calls this on parsed JSON,
+    before Pydantic has coerced anything.
+    """
+    hazard = getattr(hazard_assessment, "value", hazard_assessment)
+    control = getattr(control_status, "value", control_status)
+    return (
+        hazard == HazardAssessment.YES.value
+        and control in (ControlStatus.ABSENT.value, ControlStatus.FAILED.value)
+        and isinstance(severity, (int, float))
+        and severity >= 4
+    )
+
+
 class AnalyzeRequest(BaseModel):
     report_text: str = Field(min_length=1, max_length=20_000)
 

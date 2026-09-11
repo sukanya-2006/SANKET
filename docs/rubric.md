@@ -473,6 +473,16 @@ changelog.
   > That is a couple of hours, and we would rather report that number than one we cannot
   > stand behind.
 
+  > **OPEN QUESTION — unresolved, for whoever ran round two.** Every one of the 173 rows in
+  > `data/gold_labels.csv` records `rubric_version` **2.1**. Not one records 2.2. Yet the
+  > 52.2% → 96.1% story above credits the improvement to the v2.2 severity rewrite, and §10.6
+  > says a label made under one version and a label made under another are not the same
+  > measurement — so either round two was labelled against v2.1 and something other than this
+  > revision moved the number, or it was labelled against v2.2 and the column is wrong on every
+  > row. The labels have not been touched either way: picking a version would be inventing the
+  > provenance, which is the same mistake as picking a tiebreak winner. Whoever ran round two
+  > states which document was in front of them, and the column is corrected to match.
+
 - **v2.1** — applied the three defects found by the [rubric red-team](red-team-reports.md) before
   labelling began, so no re-labelling is required. Added a chemical-hazard ruling (the eight IOGP
   categories contain none, and a caustic splash previously had four defensible answers); added an

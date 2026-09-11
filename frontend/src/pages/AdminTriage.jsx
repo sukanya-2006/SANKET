@@ -51,12 +51,54 @@ const formatDateTime = (dateString) => {
   });
 };
 
+// The /reports endpoint caps limit at 100, so the queue arrives a page at a time.
+const PAGE_SIZE = 100;
+
+// An unclassified report has no score at all. Coercing that missing value to 0 printed it as
+// "Level 0" - the same badge a genuinely harmless report gets - so a report the classifier had
+// never seen read as a confident all-clear.
+const severityOf = (report) => {
+  const raw = report.severity_score ?? report.severity;
+
+  if (raw === null || raw === undefined || raw === '') return null;
+
+  const score = Number(raw);
+
+  return Number.isNaN(score) ? null : score;
+};
+
+// Highest severity first, then newest - applied to the whole accumulated list rather than to a
+// single page, so "load more" cannot strand a Level 5 below a Level 1.
+const sortBySeverityThenNewest = (items) =>
+  [...items].sort((a, b) => {
+    const severityA = severityOf(a) ?? 0;
+    const severityB = severityOf(b) ?? 0;
+
+    // Higher severity first
+    if (severityB !== severityA) {
+      return severityB - severityA;
+    }
+
+    // Newest first
+    const dateA = new Date(
+      a.created_at || a.report_date || 0
+    ).getTime();
+
+    const dateB = new Date(
+      b.created_at || b.report_date || 0
+    ).getTime();
+
+    return dateB - dateA;
+  });
+
 export default function AdminTriage() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
   const [actionTaken, setActionTaken] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [error, setError] = useState(null);
+  const [total, setTotal] = useState(null);
 
   const [activeTab, setActiveTab] = useState('active'); // 'active', 'dispatched', or 'archived'
 
@@ -87,64 +129,47 @@ export default function AdminTriage() {
 
 
   const fetchReports = async (currentOffset = 0) => {
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const data = await api.getReports(100, currentOffset);
+    try {
+      const data = await api.getReports(PAGE_SIZE, currentOffset);
 
-    const items = Array.isArray(data)
-      ? data
-      : data.items || [];
+      const items = Array.isArray(data)
+        ? data
+        : data.items || [];
 
-    // ------------------------------------------------
-    // ONLY SHOW LIVE WORKER-SUBMITTED REPORTS
-    // ------------------------------------------------
+      // The queue is one page of a much bigger table. Throwing away data.total made the first
+      // page look like the whole queue, so a report submitted a minute ago could sit unseen at
+      // offset 100 with nothing on screen to say more rows existed.
+      setTotal(
+        typeof data.total === 'number' ? data.total : null
+      );
 
-    // ------------------------------------------------
-    // SORT: HIGHEST SEVERITY FIRST, THEN NEWEST
-    // ------------------------------------------------
-const sortedReports = [...items].sort((a, b) => {      const severityA =
-        Number(a.severity_score ?? a.severity ?? 0);
+      // offset 0 is a fresh load or a refresh; anything else is "load more" and appends.
+      setReports((prev) =>
+        sortBySeverityThenNewest(
+          currentOffset === 0 ? items : [...prev, ...items]
+        )
+      );
 
-      const severityB =
-        Number(b.severity_score ?? b.severity ?? 0);
+      setError(null);
 
-      // Higher severity first
-      if (severityB !== severityA) {
-        return severityB - severityA;
-      }
+    } catch (err) {
+      console.error(
+        'Failed to load live reports:',
+        err
+      );
 
-      // Newest first
-      const dateA = new Date(
-        a.created_at || a.report_date || 0
-      ).getTime();
+      // Never blank the queue on failure. A cold backend start, a CORS rejection or a dropped
+      // connection used to leave an empty list, and an empty list renders as
+      // "No active hazards! Queue is clear." - the exact opposite of what happened, told to
+      // the one person whose job is to act on the hazards.
+      setError(err.message || 'Could not reach the API.');
 
-      const dateB = new Date(
-        b.created_at || b.report_date || 0
-      ).getTime();
-
-      return dateB - dateA;
-    });
-
-    console.log(
-      'LIVE WORKER REPORTS:',
-      sortedReports
-    );
-
-    setReports(sortedReports);
-
-  } catch (err) {
-    console.error(
-      'Failed to load live reports:',
-      err
-    );
-
-    setReports([]);
-
-  } finally {
-    setLoading(false);
-  }
-};
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchReports(0);
@@ -197,7 +222,10 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-slate-800">Incident Reports</h2>
-            <p className="text-xs text-slate-500">Sorted by Severity, then by Newest.</p>
+            <p className="text-xs text-slate-500">
+              Sorted by Severity, then by Newest.
+              {total !== null && ` Showing ${reports.length} of ${total} reports - ${displayedReports.length} in this tab.`}
+            </p>
           </div>
 
           {/* 3-Tab Switcher */}
@@ -223,6 +251,22 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
           </div>
         </div>
 
+        {error && (
+          <div className="mx-6 mt-6 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-slate-800 mb-0.5">Could not load the triage queue</p>
+              <p className="text-sm text-slate-600 mb-3">{error}</p>
+              <button
+                onClick={() => fetchReports(0)}
+                className="text-xs font-semibold text-[#354f52] bg-[#52796f]/10 px-3 py-1.5 rounded-xl hover:bg-[#52796f]/20 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -238,15 +282,20 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
                 <tr><td colSpan="4" className="py-12 text-center text-slate-400">Loading live data...</td></tr>
               ) : displayedReports.length === 0 ? (
                 <tr><td colSpan="4" className="py-12 text-center text-slate-500 font-medium">
-                  {activeTab === 'active' && '🎉 No active hazards! Queue is clear.'}
-                  {activeTab === 'dispatched' && 'No teams have been dispatched yet.'}
-                  {activeTab === 'archived' && 'No routine reports have been archived yet.'}
+                  {/* An empty list after a failed fetch is not an empty queue, so say nothing
+                      reassuring until the queue has actually been seen. */}
+                  {error ? 'The queue could not be loaded.' : (
+                    <>
+                      {activeTab === 'active' && '🎉 No active hazards! Queue is clear.'}
+                      {activeTab === 'dispatched' && 'No teams have been dispatched yet.'}
+                      {activeTab === 'archived' && 'No routine reports have been archived yet.'}
+                    </>
+                  )}
                 </td></tr>
               ) : (
                 displayedReports.map((report, idx) => {
                   const isPrecursor = report.is_sif_precursor || report.is_sif;
-                  const severityScore =
-                  Number(report.severity_score ?? report.severity ?? 0);
+                  const severityScore = severityOf(report);
                   const status = report.status || 'active';
 
                   return (
@@ -270,7 +319,7 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
                       </td>
                       <td className="py-4 px-6">
                         <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold ${severityScore >= 4 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>
-                          Level {severityScore}
+                          {severityScore === null ? 'Unclassified' : `Level ${severityScore}`}
                         </span>
                       </td>
                       <td className="py-4 px-6">
@@ -280,6 +329,8 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-700"><Archive className="w-3.5 h-3.5" /> Archived</span>
                         ) : isPrecursor ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500 text-white shadow-sm"><ShieldAlert className="w-3.5 h-3.5" /> SIF Precursor</span>
+                        ) : severityScore === null ? (
+                          <span className="text-xs font-medium text-slate-400">Unclassified</span>
                         ) : (
                           <span className="text-xs font-medium text-slate-400">Routine</span>
                         )}
@@ -291,6 +342,20 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
             </tbody>
           </table>
         </div>
+
+        {/* Without this the screen stopped at the first page and gave no sign there was more,
+            so the most natural demo - submit a report, then find it in triage - could fail. */}
+        {total !== null && reports.length < total && (
+          <div className="p-4 border-t border-slate-100 text-center">
+            <button
+              onClick={() => fetchReports(reports.length)}
+              disabled={loading}
+              className="px-4 py-2 bg-[#354f52] text-white rounded-xl text-sm font-semibold shadow hover:bg-[#2f3e46] transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : `Load ${Math.min(PAGE_SIZE, total - reports.length)} more`}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Inspection Modal */}
@@ -321,11 +386,13 @@ const sortedReports = [...items].sort((a, b) => {      const severityA =
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1 bg-rose-50 p-4 rounded-2xl border border-rose-100">
                   <p className="text-xs font-semibold text-rose-400 uppercase tracking-wider mb-1">AI Severity Score</p>
-                  <p className="text-3xl font-extrabold text-rose-700">Level {selectedReport.severity_score || selectedReport.severity || 0}</p>
+                  <p className="text-3xl font-extrabold text-rose-700">
+                    {severityOf(selectedReport) === null ? 'Unclassified' : `Level ${severityOf(selectedReport)}`}
+                  </p>
                 </div>
                 <div className="flex-1 bg-[#52796f]/10 p-4 rounded-2xl border border-[#52796f]/20">
                   <p className="text-xs font-semibold text-[#354f52] uppercase tracking-wider mb-1">SIF Precursor</p>
-                  <p className="text-2xl font-bold text-[#2f3e46]">{(selectedReport.is_sif_precursor || selectedReport.is_sif) ? 'Detected' : 'Negative'}</p>
+                  <p className="text-2xl font-bold text-[#2f3e46]">{(selectedReport.is_sif_precursor || selectedReport.is_sif) ? 'Detected' : severityOf(selectedReport) === null ? 'Not classified' : 'Negative'}</p>
                 </div>
               </div>
 

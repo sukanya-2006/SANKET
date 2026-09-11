@@ -1,3 +1,12 @@
+# This script MUST NOT write eval/eval_summary.md.
+#
+# It scores the shipped backend/app/baseline_model.joblib, which train_baseline.py refits on
+# every label, so the baseline F1 below is in-sample memorisation. eval_summary.md is the
+# hand-curated honest summary: it carries the retraction of that exact number, the
+# not-the-same-pool caveat and the "what must not be quoted" list. This file used to point
+# SUMMARY_MD at it, so one run silently replaced all of that with the memorised figure. Output
+# goes to run_full_eval_output_DO_NOT_QUOTE.md instead.
+
 import os
 import sys
 import time
@@ -19,7 +28,7 @@ SYNTHETIC_PATH = ROOT / "data" / "synthetic" / "synthetic_reports_for_labeling.c
 SYNTHETIC_FULL_PATH = ROOT / "data" / "synthetic" / "synthetic_reports.csv"
 OSHA_PATH = ROOT / "data" / "osha" / "osha_real_reports.csv"
 OUTPUT_CSV = ROOT / "eval" / "llm_vs_baseline_results.csv"
-SUMMARY_MD = ROOT / "eval" / "eval_summary.md"
+SUMMARY_MD = ROOT / "eval" / "run_full_eval_output_DO_NOT_QUOTE.md"
 
 def load_data():
     gold = pd.read_csv(GOLD_PATH)
@@ -183,10 +192,19 @@ def run_evaluation():
     print(f"  Mean Severity Shift (LLM - Human): {mean_sev_shift:+.3f}")
 
     # Write summary file
-    summary_content = f"""# SIF Precursor Classifier Evaluation Summary
+    summary_content = f"""# run_full_eval.py raw output - DO NOT QUOTE
 
-## Synthetic Reports (Fair Comparison, n={len(syn_df)})
-- **Baseline Classifier**:
+> **The baseline numbers in this file are in-sample memorisation, not a result.**
+> `train_baseline.py` refits the shipped model on every label, and this script scores that model
+> on those same labels. Every report below was in its training set.
+>
+> **`eval/eval_summary.md` is the curated honest summary.** It carries the cross-validated
+> baseline figure, the not-the-same-pool caveat and the retraction of the number below.
+>
+> This file is a run log. Never quote it, paste it into the deck, or cite it anywhere.
+
+## Synthetic Reports (n={len(syn_df)})
+- **Baseline Classifier** (in-sample, see banner - not a fair comparison):
   - F1 Score: {syn_base_f1:.3f}
   - PR-AUC: {syn_base_prauc:.3f}
   - Precision: {syn_base_prec:.3f}

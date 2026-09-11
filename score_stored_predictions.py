@@ -5,6 +5,7 @@ Score the predictions already sitting in Supabase against the human gold labels.
 
     python score_stored_predictions.py
     python score_stored_predictions.py --model-version <exact version string>
+    python score_stored_predictions.py --include-dev   # debugging only, never quotable
 
 WHY THIS EXISTS
 
@@ -20,7 +21,11 @@ prompt from a week ago.
 WHAT THIS IS, AND WHAT IT IS NOT
 
 This is an honest held-out score for the LLM. The model never saw the gold labels, so there is
-no leakage and no cross-validation needed - prompting is not fitting.
+no leakage and no cross-validation needed - prompting is not fitting. The dev reports listed in
+`eval/split.json` are excluded, because the prompt WAS tuned on those: scoring them is marking
+the model on its own worked examples. `eval/run_eval.py` has always excluded them; this script
+did not, and every figure it printed before that fix was inflated by however many of them the
+pool happened to contain.
 
 It is NOT a fair score for the TF-IDF baseline, and this script does not pretend to give one.
 `train_baseline.py` deliberately refits on every label so the shipped fallback is as strong as
@@ -35,6 +40,7 @@ hides which gate is doing the damage - and on this project it has always been Ga
 import argparse
 import csv
 import io
+import json
 import os
 import sys
 from collections import Counter
@@ -51,6 +57,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 from app import db  # noqa: E402
 
 GOLD_PATH = "data/gold_labels.csv"
+SPLIT_PATH = "eval/split.json"
 
 LATEST_FOR_VERSION = """
 SELECT DISTINCT ON (p.report_id)
@@ -102,10 +109,25 @@ def load_gold():
     return gold
 
 
+def load_dev_ids():
+    """The prompt-tuning ids recorded in eval/split.json.
+
+    Refusing to run without the file is deliberate: a missing split must not silently
+    degrade into scoring the dev set, which is the exact failure this guards against.
+    """
+    if not os.path.exists(SPLIT_PATH):
+        sys.exit("[!] %s not found - cannot tell which reports the prompt was tuned on.\n"
+                 "    Run eval/run_eval.py once to record the split." % SPLIT_PATH)
+    with open(SPLIT_PATH, encoding="utf-8") as fh:
+        return {str(i).strip() for i in json.load(fh)["dev"]}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model-version", default=None,
                     help="defaults to the version the API currently ships")
+    ap.add_argument("--include-dev", action="store_true",
+                    help="debugging only: keep the prompt-tuning reports in the pool")
     args = ap.parse_args()
 
     if not db.is_live():
@@ -139,6 +161,20 @@ def main():
 
     shared = sorted(set(gold) & set(preds), key=lambda x: int(x) if x.isdigit() else 0)
     print("  scored on     : %d reports both labelled and classified" % len(shared))
+
+    dev = load_dev_ids()
+    in_pool = [i for i in shared if i in dev]
+    if args.include_dev:
+        print("\n  [!] --include-dev: %d prompt-tuning reports LEFT IN the pool of %d."
+              % (len(in_pool), len(shared)))
+        print("      The prompt was written against those reports, so anything printed below")
+        print("      is the model being marked on its own worked examples. DO NOT QUOTE IT -")
+        print("      it is not comparable to eval/run_eval.py and not a held-out number.")
+    else:
+        kept = [i for i in shared if i not in dev]
+        print("  dev excluded  : pool %d -> %d  (%d prompt-tuning reports, %s)"
+              % (len(shared), len(kept), len(in_pool), SPLIT_PATH))
+        shared = kept
 
     fallbacks = [i for i in shared if preds[i]["is_fallback"]]
     if fallbacks:

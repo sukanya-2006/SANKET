@@ -104,8 +104,10 @@ narratives carry no site taxonomy, so the density dashboard runs on synthetic da
 
 **What makes it feasible.** The whole system runs on free tiers with roughly 500 model calls
 across development and demonstration — a build budget near ₹1,000. It requires no change to
-existing reporting workflows because it sits downstream of them. There is no model training, so
-there is no data collection programme to fund before it is useful.
+existing reporting workflows because it sits downstream of them. The LLM path needs no training
+data at all. The baseline fallback does train — on our own 180 labelled reports — so putting it in
+front of an operator's vocabulary would mean re-labelling a comparable set in that vocabulary,
+which is a labelling exercise rather than a data collection programme.
 
 **Known limitations.** A site that under-reports cannot be ranked; rate-based ranking protects
 against uneven honest reporting, not against silence. The rubric's severity thresholds are our own

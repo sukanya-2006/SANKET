@@ -482,6 +482,39 @@ def test_sql_schema_carries_every_locked_field_name():
         assert field in sql, f"locked name {field} missing from schema.sql"
 
 
+def test_every_classifier_derives_the_precursor_flag_the_rubric_way():
+    """A flag the SQL CHECK disagrees with makes the row unstorable - and only precursor rows.
+
+    schema.sql's precursor_requires_all_three_gates recomputes is_sif_precursor from the three
+    gates, so the rule is restated here on purpose instead of imported: this catches the shared
+    helper being wrong as well as a classifier setting the flag on its own. The baseline did
+    exactly that, pairing a true flag with control_status "unclear", so every precursor it found
+    was rejected on insert - and nothing else was.
+    """
+    from app import classifier_base
+    from app.schemas import ClassificationResult, ControlStatus, HazardAssessment
+    from app.stub import classify_stub
+
+    texts = [PRECURSOR_TEXT, BARRIER_HELD_TEXT, LOW_HAZARD_TEXT, "Issue reported."]
+    # Both classifiers that run without a network: the stub and Member 2's TF-IDF baseline.
+    # The Groq classifier derives the flag through the same helper.
+    for name, classify in (("stub", classify_stub), ("baseline", classifier_base.classify)):
+        for text in texts:
+            raw = classify(text)
+            if not isinstance(raw, ClassificationResult):
+                raw = ClassificationResult.model_validate(raw)
+            expected = (
+                raw.hazard_assessment is HazardAssessment.YES
+                and raw.control_status in (ControlStatus.ABSENT, ControlStatus.FAILED)
+                and raw.severity >= 4
+            )
+            assert raw.is_sif_precursor is expected, (
+                f"{name} on {text[:40]!r}: is_sif_precursor={raw.is_sif_precursor} with "
+                f"hazard={raw.hazard_assessment.value}, control={raw.control_status}, "
+                f"severity={raw.severity}"
+            )
+
+
 def test_recommended_check_is_not_persisted():
     """It is a static lookup; a stored copy would drift from the checklist we ship."""
     from app.db import SCHEMA_SQL

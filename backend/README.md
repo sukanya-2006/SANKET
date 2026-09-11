@@ -82,7 +82,7 @@ Contract notes for Member 5:
   Asserted by a test.
 - `recommended_check` is non-null only when `is_sif_precursor` is true. It is a **static lookup**,
   never model output.
-- `is_fallback` is always `false` in Phase 1. It flips true in Phase 4 when the Claude call fails
+- `is_fallback` is always `false` in Phase 1. It flips true in Phase 4 when the Groq call fails
   or times out and the local TF-IDF baseline answers. **Build the "degraded mode — keyword
   baseline" banner against this field now.**
 - Stub results are deterministic: same text, same result.
@@ -150,12 +150,16 @@ backend/tests/        36 tests, hermetic — they pin the classifier registry so
 - **`gold_labels.gate_split`** records which gate the annotators disagreed on. That column is the
   whole diagnostic if agreement lands under 70%: it says which gate to revise instead of
   rewriting the rubric wholesale.
-- **RLS is on with no policies.** The frontend never talks to Supabase — it goes through FastAPI,
-  which holds the service key. A leaked anon key reads nothing.
+- **RLS is on with no policies — be exact about what that covers.** It stops the anon and
+  authenticated roles behind Supabase's REST API, so an anon key leaked from the browser bundle
+  reads nothing. It does *not* constrain this API: the service key is never read anywhere in the
+  code, and FastAPI connects with psycopg over `SUPABASE_DB_URL` as the role that owns the tables
+  — Postgres exempts owners from RLS unless `FORCE ROW LEVEL SECURITY` is set. What protects the
+  tables from this side is that the connection string stays on the server.
 - Three tests assert that the SQL vocabulary, the Pydantic enums, and the locked names have not
   drifted apart.
 
-The API runs fine with no database: `db.get_client()` returns None and the routes serve the
+The API runs fine with no database: `db.is_live()` returns False and the routes serve the
 seeded stub. Member 5 is never blocked on an instance being awake, and the demo does not die if
 a free-tier database went to sleep.
 

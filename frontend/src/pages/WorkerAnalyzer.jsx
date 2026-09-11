@@ -1,8 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mic, Square, ArrowRight, ShieldCheck, Sparkles, CheckCircle2, RotateCcw, Loader2 } from 'lucide-react';
+import { Mic, Square, ArrowRight, ShieldCheck, Sparkles, CheckCircle2, RotateCcw, Loader2, Sun, Moon } from 'lucide-react';
 import { api } from '../api';
 import { useVoiceRecorder } from '../useVoiceRecorder';
+
+// The device clock decides the default shift. Night shift is 18:00 to 06:00.
+//
+// Site, activity and shift were all hardcoded here - every live submission was filed as
+// "Rig 4", "General Operations", "day". That is not a cosmetic default: the dashboard
+// ranks sites by precursor DENSITY, so one site absorbed every real report and its rate
+// climbed while every other site's stayed frozen, and /aggregate/shifts saw a fleet that
+// never worked nights.
+function defaultShift() {
+  const hour = new Date().getHours();
+  return hour >= 18 || hour < 6 ? 'night' : 'day';
+}
 
 export default function WorkerAnalyzer() {
   const [text, setText] = useState('');
@@ -10,6 +22,32 @@ export default function WorkerAnalyzer() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [voiceError, setVoiceError] = useState('');
+  const [site, setSite] = useState('');
+  const [activity, setActivity] = useState('');
+  const [shift, setShift] = useState(defaultShift);
+  const [sites, setSites] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [metaError, setMetaError] = useState('');
+
+  // The site list is whatever the database already holds, so a report is filed against a
+  // site the aggregates recognise instead of a fresh spelling that splits it in two.
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getMeta()
+      .then((meta) => {
+        if (cancelled) return;
+        setSites(meta.sites ?? []);
+        setActivities(meta.activities ?? []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Failed to load site list:', err);
+        setMetaError('Could not load the site list. Type your site name instead.');
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   const { isRecording, isTranscribing, startRecording, stopRecording } = useVoiceRecorder({
     language,
@@ -23,16 +61,16 @@ export default function WorkerAnalyzer() {
  const handleAnalyze = async (e) => {
   e.preventDefault();
 
-  if (!text.trim()) return;
+  if (!text.trim() || !site.trim() || !activity.trim()) return;
 
   setLoading(true);
 
   try {
     const data = await api.submitWorkerReport({
       report_text: text,
-      site: "Rig 4",
-      activity: "General Operations",
-      shift: "day",
+      site: site.trim(),
+      activity: activity.trim(),
+      shift,
       is_contractor: false,
     });
 
@@ -134,9 +172,89 @@ export default function WorkerAnalyzer() {
               className="w-full bg-[#f8faf9] border border-slate-200 rounded-2xl p-4 text-base text-slate-700 outline-none focus:border-[#52796f] focus:ring-2 focus:ring-[#52796f]/20 transition-all resize-none"
             />
 
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="site" className="block text-sm font-semibold text-[#354f52] mb-2">
+                  Where are you?
+                </label>
+
+                {sites.length > 0 ? (
+                  <select
+                    id="site"
+                    value={site}
+                    onChange={(e) => setSite(e.target.value)}
+                    className="w-full bg-[#f8faf9] border border-slate-200 rounded-2xl p-4 text-base text-slate-700 outline-none focus:border-[#52796f] focus:ring-2 focus:ring-[#52796f]/20 transition-all cursor-pointer"
+                  >
+                    <option value="">Select your site</option>
+                    {sites.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                ) : (
+                  // Only when the site list could not be fetched. A worker standing in front
+                  // of a hazard must still be able to file, so fall back to typing it.
+                  <input
+                    id="site"
+                    type="text"
+                    value={site}
+                    onChange={(e) => setSite(e.target.value)}
+                    placeholder="Site name"
+                    className="w-full bg-[#f8faf9] border border-slate-200 rounded-2xl p-4 text-base text-slate-700 outline-none focus:border-[#52796f] focus:ring-2 focus:ring-[#52796f]/20 transition-all"
+                  />
+                )}
+
+                {metaError && (
+                  <p className="text-sm text-amber-700 mt-2">{metaError}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="activity" className="block text-sm font-semibold text-[#354f52] mb-2">
+                  What were you doing?
+                </label>
+                <input
+                  id="activity"
+                  type="text"
+                  list="activity-options"
+                  value={activity}
+                  onChange={(e) => setActivity(e.target.value)}
+                  placeholder="e.g. Lifting, Confined space entry"
+                  className="w-full bg-[#f8faf9] border border-slate-200 rounded-2xl p-4 text-base text-slate-700 outline-none focus:border-[#52796f] focus:ring-2 focus:ring-[#52796f]/20 transition-all"
+                />
+                <datalist id="activity-options">
+                  {activities.map((a) => (
+                    <option key={a} value={a} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <span className="block text-sm font-semibold text-[#354f52] mb-2">Shift</span>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { value: 'day', label: 'Day', icon: Sun },
+                    { value: 'night', label: 'Night', icon: Moon },
+                  ].map(({ value, label, icon: Icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setShift(value)}
+                      className={`flex items-center justify-center gap-2 py-4 rounded-2xl text-base font-semibold border transition-all ${
+                        shift === value
+                          ? 'bg-[#354f52] text-white border-[#354f52] shadow-sm'
+                          : 'bg-[#f8faf9] text-slate-600 border-slate-200 hover:border-[#52796f]'
+                      }`}
+                    >
+                      <Icon className="w-5 h-5" /> {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <button
               type="submit"
-              disabled={loading || !text.trim()}
+              disabled={loading || !text.trim() || !site.trim() || !activity.trim()}
               className="w-full bg-[#354f52] hover:bg-[#2f3e46] text-white py-5 rounded-2xl font-semibold text-lg shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (

@@ -158,20 +158,15 @@ guessing at it makes you wrong on the report in front of you. If the realistic w
 genuinely involves permanent disability or death, score 4 or 5 even if that means many reports in
 a row land there. Never lower a score to keep a distribution looking plausible.
 
-(Our own labelled set runs at roughly 59% precursors, because every synthetic report was
-generated centred on a hazard category. An earlier version of this prompt asserted "roughly one
-in five", which is the rate in a realistic report stream but not in this data - and the model was
-penalised for obeying it. See docs/eval-diagnosis.md.)
-
 Two worked examples to calibrate against:
 - A contractor on a ladder loses footing and falls six inches onto a padded floor, spraining a
   wrist. Even though a required guard rail was missing, the fall distance is trivial - the
   realistic worst case is still a sprain or minor fracture, not a life-altering injury. Score
   this 2, not 4.
-- A worker slips off a hatch and drops two feet onto a steel floor, recovering immediately with
-  no injury. A missing latch is a real control gap, but a two-foot drop with an immediate,
-  uninjured recovery has no direct path to death - the worst case here is a bruise or minor
-  sprain. Score this 2, not 5.
+- A fitter steps backwards off an unmarked kerb beside a pump house and drops about a foot onto
+  the concrete apron, catching his balance and carrying on unhurt. The missing edge marking is a
+  real control gap, but a one-foot step-down with an immediate, uninjured recovery has no direct
+  path to death - the worst case here is a twisted ankle. Score this 2, not 5.
 Do not let "a control was missing" by itself pull severity upward - severity is about the
 physical consequence of the realistic counterfactual, not about how serious the control gap
 sounds on its own.
@@ -277,6 +272,7 @@ def classify(report_text: str) -> dict:
     import time
 
     from .config import get_settings
+    from .schemas import derive_precursor
 
     # The same deadline classifier.py enforces from the outside. Retrying past it does not
     # just waste time, it turns a recoverable rate limit into a certain timeout.
@@ -342,17 +338,16 @@ def classify(report_text: str) -> dict:
     if result.get("control_status") in ("", "null", "None"):
         result["control_status"] = None
 
-    # Recompute is_sif_precursor ourselves from the three gates, per the rubric's own
-    # decision table (v2.2 §6) - never trust the model's boolean directly. The model
-    # can be internally inconsistent (e.g. returning severity=3 AND
-    # is_sif_precursor=true in the same response, which the rubric says is invalid).
-    # A database check constraint caught exactly this once; deriving the boolean
-    # deterministically here means it can never happen again, for any report.
-    result["is_sif_precursor"] = (
-        result.get("hazard_assessment") == "yes"
-        and result.get("control_status") in ("absent", "failed")
-        and isinstance(result.get("severity"), (int, float))
-        and result["severity"] >= 4
+    # Recompute is_sif_precursor ourselves from the three gates - never trust the
+    # model's boolean directly. The model can be internally inconsistent (e.g. returning
+    # severity=3 AND is_sif_precursor=true in the same response, which the rubric says is
+    # invalid). A database check constraint caught exactly this once; deriving the boolean
+    # deterministically means it can never happen again, for any report.
+    #
+    # Through the shared helper rather than a copy of the rule: the baseline kept its own
+    # copy, drifted from it, and every precursor it flagged became unstorable.
+    result["is_sif_precursor"] = derive_precursor(
+        result.get("hazard_assessment"), result.get("control_status"), result.get("severity")
     )
 
     return result
@@ -378,4 +373,18 @@ def classify(report_text: str) -> dict:
 # "no gas test was recorded", "the lanyard hung unclipped" - which is not silence, it is
 # evidence. "Unclear" then forces is_sif_precursor false regardless of severity, so every one
 # of those became a missed precursor.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-g2fix1"
+#
+# Bumped to -clean1 because g2fix1 was partly measuring itself. Two pieces of the eval set had
+# leaked into the prompt it was scored with:
+#   - The second Gate 3 worked example was report 113 almost word for word, and it told the
+#     model to score that report 2 where gold says 5. 113 sits in the held-out split, so the
+#     prompt was hand-coaching one graded answer, in the wrong direction. Replaced with an
+#     invented incident that teaches the same lesson and appears in neither corpus. (The first
+#     example is report 76, which is in dev - tuning the prompt against dev is what dev is for.)
+#   - Gate 3 told the model the labelled set "runs at roughly 59% precursors" two lines after
+#     telling it that it had no reliable information about that base rate. docs/eval-diagnosis.md
+#     records the line as removed; it had only been corrected from a wrong number to a right
+#     one, which is the leak, not the fix. Deleted.
+# Every number measured under g2fix1 came from a prompt holding part of its own answer key and
+# must be re-measured before it is quoted again.
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-clean1"

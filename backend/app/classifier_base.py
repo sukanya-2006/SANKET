@@ -28,6 +28,8 @@ import os
 
 import joblib
 
+from .schemas import derive_precursor
+
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "baseline_model.joblib")
 _TOP_WORDS_PATH = os.path.join(os.path.dirname(__file__), "baseline_top_words.json")
 
@@ -87,19 +89,27 @@ def classify(report_text: str) -> dict:
 
     lsr_rule = _guess_lsr_rule(report_text) if is_precursor else "none"
 
+    # The model predicts the composite label directly, so the three gate fields are
+    # back-derived from that one prediction rather than judged separately - and they
+    # have to agree with it. schema.sql's precursor_requires_all_three_gates CHECK
+    # recomputes the flag from exactly these three, so reporting "unclear" here - the
+    # honest answer about the baseline's lack of signal on control status, but one the
+    # CHECK reads as false - made every precursor the baseline found unstorable.
+    hazard_assessment = "yes" if is_precursor else "no"
+    # "absent" is the coarse stand-in for what the model actually predicts, "absent or
+    # failed"; the baseline cannot tell those two apart. Severity 4 is the minimum a
+    # precursor takes under the rubric's decision table, 2 otherwise - a placeholder
+    # scale, not a real severity judgement. The LLM classifier is what actually reasons
+    # about control status and severity.
+    control_status = "absent" if is_precursor else None
+    severity = 4 if is_precursor else 2
+
     return {
-        "hazard_assessment": "yes" if is_precursor else "no",
+        "hazard_assessment": hazard_assessment,
         "lsr_rule": lsr_rule,
-        # The baseline has no real signal on control status - "unclear" is
-        # the honest answer, not a guess dressed up as one.
-        "control_status": "unclear" if is_precursor else None,
-        # Coarse: precursor predictions default to severity 4 (the minimum
-        # that satisfies is_sif_precursor under the rubric's own decision
-        # table), non-precursors to 2. This is a placeholder scale, not a
-        # real severity judgement - the LLM classifier is what actually
-        # reasons about severity.
-        "severity": 4 if is_precursor else 2,
-        "is_sif_precursor": is_precursor,
+        "control_status": control_status,
+        "severity": severity,
+        "is_sif_precursor": derive_precursor(hazard_assessment, control_status, severity),
         "confidence": round(confidence, 4),
         "flagged_phrases": matched_words[:5],
         "reasoning": (

@@ -142,10 +142,17 @@ CREATE INDEX IF NOT EXISTS gold_labels_report_idx ON gold_labels (report_id);
 
 
 -- ---------------------------------------------------------------------------
--- Row Level Security.
--- The frontend never talks to Supabase directly — it goes through FastAPI, which
--- holds the service key. So RLS is ON with no policies: the service role bypasses
--- it, and an anon key leaked from the browser bundle reads nothing.
+-- Row Level Security. Be exact about what it covers here, because the obvious
+-- reading of it is wrong and someone will ask.
+-- The API never uses the Supabase service key: it connects with psycopg over
+-- SUPABASE_DB_URL as the role that owns these tables, and Postgres exempts a
+-- table's owner from RLS unless the table also has FORCE ROW LEVEL SECURITY.
+-- So RLS constrains nothing on the FastAPI path. What RLS ON with no policies
+-- does buy is every other role: the anon and authenticated roles behind
+-- Supabase's REST API match no policy and read nothing, so an anon key lifted
+-- from the browser bundle is useless. The control that protects these tables
+-- from the API side is keeping SUPABASE_DB_URL on the server — it is an owner
+-- credential, and anything holding it has full access.
 -- ---------------------------------------------------------------------------
 ALTER TABLE sites       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports     ENABLE ROW LEVEL SECURITY;

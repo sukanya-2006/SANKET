@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { api } from './api';
 
 /**
  * useVoiceRecorder - a hook that handles real microphone recording and
@@ -70,21 +71,10 @@ export function useVoiceRecorder({ language, onTranscribed, onError }) {
   const sendForTranscription = async (audioBlob) => {
     setIsTranscribing(true);
     try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('language', language || 'en');
-
-      const res = await fetch('http://localhost:8000/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.detail || `Transcription failed (${res.status})`);
-      }
-
-      const data = await res.json();
+      // Goes through api.transcribe so it uses the same BASE_URL as every other call.
+      // This used to post to a hardcoded http://localhost:8000, which the browser blocks
+      // as mixed content on the HTTPS deployment - voice only ever worked in dev.
+      const data = await api.transcribe(audioBlob, language || 'en');
       onTranscribed?.(data.text);
     } catch (err) {
       console.error('Transcription error:', err);

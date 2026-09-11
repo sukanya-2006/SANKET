@@ -5,12 +5,35 @@ const BASE_URL =
     : 'https://sanket-backend-put3.onrender.com');
 
 
+// FastAPI answers a 422 with `detail` as an ARRAY of error objects, not a string. Handing
+// that to Error() stringified it as "[object Object]", so a worker whose submission was
+// rejected for a missing field got an alert saying nothing at all. Name the field and
+// quote the message instead.
+function formatDetail(detail, status) {
+
+  if (typeof detail === 'string') return detail;
+
+  if (Array.isArray(detail)) {
+
+    const lines = detail.map((item) => {
+      const field = Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : null;
+      const message = item?.msg || 'invalid value';
+      return field ? `${field}: ${message}` : message;
+    });
+
+    if (lines.length) return lines.join('\n');
+  }
+
+  return `Request failed (${status})`;
+}
+
+
 async function handleResponse(res) {
   const body = await res.json().catch(() => ({}));
 
   if (!res.ok) {
     throw new Error(
-      body.detail || `Request failed (${res.status})`
+      formatDetail(body.detail, res.status)
     );
   }
 
@@ -36,6 +59,48 @@ export const api = {
         report_text: text
       })
     });
+
+    return handleResponse(res);
+  },
+
+
+  // ----------------------------------------
+  // META - ENUMS, VERSIONS, SITE + ACTIVITY LISTS
+  // ----------------------------------------
+  //
+  // `sites` and `activities` are the values already present in the database. The worker
+  // form picks from them so a report is filed against a site the aggregates know about,
+  // rather than a label invented at the keyboard that splits one site into two rows.
+  getMeta: async () => {
+
+    const res = await fetch(`${BASE_URL}/meta`);
+
+    return handleResponse(res);
+  },
+
+
+  // ----------------------------------------
+  // VOICE TRANSCRIPTION
+  // ----------------------------------------
+  //
+  // This belongs here, next to every other call, because it used to be a bare
+  // http://localhost:8000 inside the recorder hook. Served over HTTPS the browser blocks
+  // that as mixed content, so the voice button - the feature the worker screen is built
+  // around - worked only on the laptop it was written on.
+  transcribe: async (audioBlob, language = 'en') => {
+
+    const formData = new FormData();
+
+    formData.append('audio', audioBlob, 'recording.webm');
+    formData.append('language', language);
+
+    const res = await fetch(
+      `${BASE_URL}/transcribe`,
+      {
+        method: 'POST',
+        body: formData
+      }
+    );
 
     return handleResponse(res);
   },

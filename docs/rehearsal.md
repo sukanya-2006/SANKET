@@ -184,10 +184,13 @@ anything else.
 
 **You own:** deployment, tests, sources, and the tiebreak.
 
-- *"Do you actually have tests?"* → Thirty-four, no skips. They cover the contract, the retry, the
-  fallback, the timeout, the cache, and the aggregation rules. Offer to open the file.
-- *How the tiebreak worked* → I adjudicated every disagreement and recorded which gate split, so a
-  low agreement number tells us which gate to fix rather than forcing a full rewrite.
+- *"Do you actually have tests?"* → Thirty-seven, no skips. They cover the contract, the retry,
+  the fallback, the timeout, the cache, and the aggregation rules. Offer to open the file.
+- *How the tiebreak worked* → Every disagreement is on a worksheet with the gate that split it
+  recorded — one Gate 2, six Gate 3 — so a low agreement number tells us which gate to fix
+  rather than forcing a full rewrite. What is *not* done is the adjudication: all seven are
+  still open, and the gold set is the 173 rows the annotators already agreed on, with the
+  disputed reports held out rather than decided.
 - *What happens if the demo deployment is asleep* → We wake it before presenting; and if it is
   gone entirely the API still answers without a database, on seeded data, and says so.
 - *Where the sources come from* → The PS's own citations plus IOGP Report 459. Anything we could

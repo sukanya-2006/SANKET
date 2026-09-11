@@ -19,14 +19,36 @@ React • FastAPI • Python • Groq • GPT-OSS-20B • TF-IDF • Supabase (P
 ```
 
 SQLite is still in the system, but only as the classification cache on the API instance. The
-data lives in Supabase Postgres — 209 reports, 533 human labels, and an append-only prediction
-log. Saying SQLite undersells it and invites a question about whether this scales.
+data lives in Supabase Postgres — 180 labelled reports (150 synthetic, 30 OSHA), 533 human
+labels, and an append-only prediction log. The `reports` table holds more rows than that, but
+the extras are submissions the worker demo wrote in and they carry no labels, so 180 is the
+corpus number and the one every other document uses. Saying SQLite undersells it and invites a
+question about whether this scales.
 
 The rest of slide 3 is accurate. The flow line and the SIF rule both still hold.
 
 ---
 
 ## Slide 6 — RESEARCH AND REFERENCES
+
+> ### 11 September, later the same day — the LLM figure is withdrawn
+>
+> An adversarial audit found that the shipped prompt contained a **held-out report**, with an
+> instruction to score it the opposite of its gold label, and separately disclosed the set's
+> precursor base rate six lines after telling the model it had no such information.
+>
+> Every LLM F1 this project has quoted — 0.719, 0.776, 0.822 — was measured under a prompt
+> holding part of its own answer key. **None of them goes on a slide.** The prompt is fixed
+> (`...-clean1`), and a re-measurement needs a full re-classification pass, which the Groq free
+> tier caps at about 63 reports a day.
+>
+> The TF-IDF baseline's 0.754 is unaffected and still quotable — it never saw the prompt.
+>
+> If the deck is due before the re-run finishes, present the baseline number, the labelling
+> story, and the Gate 2 diagnosis, and say the LLM figure is being re-measured after we found
+> our own leak. That is a stronger position than a number that dies on the first follow-up.
+
+
 
 **Currently says:**
 
@@ -48,8 +70,9 @@ the stub it stayed that way. Both are fixed.
 
 ```
 Prototype Evaluation:
-● LLM (prompt g2fix1): F1 0.822 — held out, n=71
 ● TF-IDF baseline: F1 0.754 ± 0.077, PR-AUC 0.847 — 5-fold CV, n=114
+● LLM: re-measurement in progress — the prompt it was scored under contained
+  a held-out report, so the previous figure is withdrawn
 ● OSHA generalisation: F1 0.118 (n=30 — too small to conclude from)
 ● Labels: 180 reports, two annotators, written rubric (v2.2). Round 1 independent:
   52% agreement, kappa 0.083 — so we rewrote the severity gate. Round 2: 96%, but
@@ -75,8 +98,8 @@ one we cannot defend.
 ### Three things to say before a judge asks
 
 **The two rows are not on the same pool.** The baseline is cross-validated over 114 reports;
-the LLM is scored on the 65 with both a gold label and a stored prediction. Say "indicative",
-not "decisive".
+the LLM is scored on the 71 with both a gold label and a stored prediction under g2fix1 — the
+same 71 as on the slide. Say "indicative", not "decisive".
 
 **Our precursor rate is 58.7%, not the 20–25% the problem statement cites.** The generator
 centred every synthetic report on a hazard category, so almost every report clears Gate 1. It
