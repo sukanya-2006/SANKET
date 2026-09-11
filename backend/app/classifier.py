@@ -15,7 +15,7 @@ The pipeline, in order:
         │     ├─ returns something Pydantic rejects  ─> retry ONCE
         │     │        └─ rejected again ────────────> baseline, is_fallback=True
         │     └─ raises / times out ─────────────────> baseline, is_fallback=True
-        └─ baseline answer is cached too, so a demo that fell back stays consistent
+        └─ a baseline answer is NOT cached, so the next call can recover
 
 Two things this buys us for free, both of which are answers to hostile questions:
 
