@@ -6,8 +6,10 @@ files. Compares them, computes raw agreement and Cohen's kappa (the
 "human ceiling" number your pitch depends on), and produces the final
 data/gold_labels.csv.
 
-Rows where both annotators agree on is_sif_precursor use that agreed
-label directly. Rows where they disagree are NOT silently resolved here -
+is_sif_precursor is RE-DERIVED from the three gates before anything is
+compared, per rubric sections 2 and 6 - the CSVs carry it as a typed column and
+a typo there must not be able to decide whether two people agreed. Rows where
+both annotators agree on the derived label use it directly. Rows where they disagree are NOT silently resolved here -
 they're written to data/labeling_disagreements.csv for the tiebreaker
 (M6) to review and adjudicate by hand, per rubric v2.2 section 10's
 protocol. gold_labels.csv will have blank judgment fields for those rows
@@ -30,13 +32,54 @@ JUDGMENT_COLUMNS = ["hazard_assessment", "lsr_rule", "control_status", "severity
 
 
 def normalize(df: pd.DataFrame) -> pd.DataFrame:
-    """Light cleanup so 'TRUE'/'true'/True all compare equal, etc."""
+    """Clean up spelling, then RE-DERIVE is_sif_precursor from the three gates.
+
+    The rubric (sections 2 and 6) says the label is computed, never typed. This script used to
+    compare the typed column straight from the CSV, and that produced two opposite errors on
+    the real files:
+
+      report 56  both annotators recorded identical gates - yes / failed / 4 - but one typed
+                 the boolean as False. Compared on the typed column they "disagreed", so a
+                 report they fully agreed on was held out of the gold set awaiting a tiebreak
+                 that was never needed.
+
+      reports    one annotator typed True against her own gates (severity 3, and an 'unclear'
+      51 and 96  control). The other typed True from gates that genuinely gave True. Compared
+                 on the typed column they "agreed", so the merge took annotator A's row as
+                 gold without anyone adjudicating - on two reports where the annotators
+                 actually differ, on severity and on control_status respectively.
+
+    A typo in a derived field cannot be allowed to decide either whether two people agree or
+    what the gold answer is. Deriving here makes both impossible.
+    """
     df = df.copy()
-    df["is_sif_precursor"] = df["is_sif_precursor"].astype(str).str.strip().str.upper().map(
-        {"TRUE": True, "FALSE": False}
-    )
     for col in ["hazard_assessment", "lsr_rule", "control_status"]:
         df[col] = df[col].astype(str).str.strip().str.lower().replace({"nan": ""})
+
+    # lsr_rule vocabulary is underscored (NAMES.md). A space splits one rule into two buckets
+    # in every GROUP BY downstream, so normalise it before anything compares on it.
+    df["lsr_rule"] = df["lsr_rule"].str.replace(" ", "_", regex=False)
+
+    # There is no control to assess for a hazard we could not name (rubric section 2).
+    df.loc[df["hazard_assessment"] != "yes", "control_status"] = ""
+
+    df["severity"] = pd.to_numeric(df["severity"], errors="coerce")
+
+    typed = df["is_sif_precursor"].astype(str).str.strip().str.upper().map(
+        {"TRUE": True, "FALSE": False}
+    )
+    df["is_sif_precursor"] = (
+        (df["hazard_assessment"] == "yes")
+        & (df["control_status"].isin(["absent", "failed"]))
+        & (df["severity"] >= 4)
+    )
+
+    contradicted = (typed.notna()) & (typed != df["is_sif_precursor"])
+    if contradicted.any():
+        ids = df.loc[contradicted, "report_id"].tolist()
+        print(f"  [i] Re-derived is_sif_precursor on {contradicted.sum()} row(s) whose typed "
+              f"value contradicted their own gates: {ids}")
+
     return df
 
 
@@ -92,7 +135,13 @@ def main():
     agreed = merged[agree_mask].copy()
     disagreed = merged[~agree_mask].copy()
 
-    # For agreed rows, take annotator A's values as gold (they matched anyway)
+    # For agreed rows, take annotator A's values as gold.
+    #
+    # "Agreed" here means agreed on the DERIVED label, which is the thing being predicted.
+    # Two annotators can land on the same label from severity 4 and severity 5; A's row is
+    # taken in that case, and that is a documented tie-break, not a claim they were identical.
+    # What must never happen is this branch running because a typed boolean matched while the
+    # gates did not - see normalize().
     gold_rows = []
     for _, row in agreed.iterrows():
         gold_rows.append({

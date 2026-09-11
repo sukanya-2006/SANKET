@@ -26,6 +26,23 @@ load_dotenv()
 
 MODEL_NAME = "openai/gpt-oss-20b"  # same free-tier model already in use elsewhere
 
+# Retry budget for a rate-limited call, and the deadline it has to fit inside.
+#
+# Groq's free tier caps TOKENS, not requests, and it does so twice: ~8,000 per minute and
+# 200,000 per day. This system prompt is ~2,650 tokens and max_tokens is 500, so one report
+# costs ~3,150 against both - roughly two calls a minute, and about 63 reports a day. A 3/6/9
+# second backoff gives up long before a bucket that refills every ~25 seconds has cleared.
+#
+# These waits are a CEILING, not a schedule. classifier.py runs this under a hard timeout
+# (LLM_TIMEOUT_SECONDS), and a retry budget that outlives the outer deadline is worse than no
+# retry at all - the wrapper kills the call mid-sleep, so a rate-limited report can never
+# succeed however many times it is retried, and it surfaces as a timeout, which points at the
+# wrong thing entirely. _sleep_within_deadline() only sleeps when the wait plus one more
+# attempt still fit.
+RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (30, 45)
+ESTIMATED_CALL_SECONDS = 5.0
+
 # Built on first use, not at import. Constructing this at import time meant a missing
 # GROQ_API_KEY took down the entire API — no /health, no /reports, no dashboard — which is
 # the opposite of the degraded mode this classifier is supposed to sit behind.
@@ -98,9 +115,34 @@ paper, and "being careful" are NOT direct controls.
   Do not infer this - the text must say so.
 - "absent": no control existed, or one existed but was not used/was removed/bypassed/disabled.
 - "failed": a control was in place and did not hold (broke, gave way, was defeated by the event).
-- "unclear": a hazard is clearly present but the narrative doesn't say what the control was doing. \
-  Do NOT assume "the person got hurt so the control must have failed" - that is an unsupported \
-  inference. Silence about controls is "unclear", never "absent".
+- "unclear": a hazard is clearly present and the narrative says NOTHING either way about what \
+  control was in place. Do NOT assume "the person got hurt so the control must have failed" - \
+  that is an unsupported inference. Genuine silence about controls is "unclear".
+
+THE ABSENT / UNCLEAR BOUNDARY. This is the single most common error on this task, so read it \
+twice. "Unclear" means the narrative did not tell you. It does NOT mean the narrative told you \
+a control was missing and you would like more detail.
+
+A report that states a required control was not done, not used, not in place, expired, \
+bypassed, removed, or skipped is "absent". That IS the evidence. You are not inferring it, you \
+are reading it. Phrases like "without a gas test", "no permit was raised", "the harness was not \
+clipped", "lockout was not applied", "no attendant was posted", "no barricade", "the guard had \
+been removed" are all direct statements that the targeted control was absent.
+
+  - "Two workers entered the vessel. No gas test was recorded and no attendant was posted."
+    -> absent. The text names two missing controls. Not unclear.
+  - "A worker was struck by a reversing vehicle in the yard."
+    -> unclear. Nothing is said about banksman, segregation, or reversing alarm.
+  - "A worker climbed the scaffold without tying off; the lanyard hung unclipped."
+    -> absent. Fall arrest existed and was not used.
+  - "The employee suffered a fracture when the platform gave way."
+    -> failed. A control was in place and did not hold.
+
+Reserve "unclear" for the second kind of report only. Defaulting to "unclear" whenever a \
+control is not described in full detail is the same mistake as defaulting to "absent" whenever \
+someone was hurt - both replace reading with a reflex, and "unclear" is the one that quietly \
+hides real precursors, because it makes is_sif_precursor false no matter how severe the \
+outcome would have been.
 If control_status is "present": is_sif_precursor is false regardless of severity.
 
 GATE 3 - SEVERITY (severity, 1-5) - always score this, for every report
@@ -209,6 +251,20 @@ def _extract_json(raw_text: str) -> dict:
     return json.loads(text)
 
 
+def _sleep_within_deadline(seconds: float, deadline: float) -> bool:
+    """Sleep for `seconds` only if that plus one more attempt still fits before `deadline`.
+
+    Returns False when the deadline leaves no room, in which case the caller must give up now
+    and let the baseline answer rather than sleeping into a timeout the wrapper will kill.
+    """
+    import time
+
+    if deadline - time.monotonic() <= seconds + ESTIMATED_CALL_SECONDS:
+        return False
+    time.sleep(seconds)
+    return True
+
+
 def classify(report_text: str) -> dict:
     """Implements the Classifier protocol from classifier.py.
 
@@ -218,10 +274,18 @@ def classify(report_text: str) -> dict:
     should raise on any hard failure (network error, bad JSON) rather than try
     to patch things up - that's what the fallback pipeline is for.
     """
+    import time
+
+    from .config import get_settings
+
+    # The same deadline classifier.py enforces from the outside. Retrying past it does not
+    # just waste time, it turns a recoverable rate limit into a certain timeout.
+    deadline = time.monotonic() + get_settings().llm_timeout_seconds
+
     response = None
     last_exc = None
 
-    for attempt in range(3):
+    for attempt in range(RETRY_ATTEMPTS):
         try:
             response = _get_client().chat.completions.create(
                 model=MODEL_NAME,
@@ -247,10 +311,15 @@ def classify(report_text: str) -> dict:
                 or "unreachable" in err_str
             )
 
-            if is_retryable and attempt < 2:
-                import time
-                time.sleep(3.0 * (attempt + 1))
-                continue
+            if is_retryable and attempt < RETRY_ATTEMPTS - 1:
+                if _sleep_within_deadline(RETRY_BACKOFF_SECONDS[attempt], deadline):
+                    continue
+                raise TimeoutError(
+                    "Groq rate-limited and the %.0fs deadline leaves no room to wait it "
+                    "out. Raise LLM_TIMEOUT_SECONDS for batch work, or space calls further "
+                    "apart so the token bucket is not empty when the call is made."
+                    % get_settings().llm_timeout_seconds
+                ) from exc
 
             raise
 
@@ -296,4 +365,17 @@ def classify(report_text: str) -> dict:
 # Bumped to distinguish predictions made under the g3fix3 severity-calibration
 # examples (short-fall / quick-recovery worked examples added to Gate 3) from
 # earlier g3fix2 predictions - lets the resumable reclassify script tell them apart.
-classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-g3fix4"
+# Bumped for the Gate 2 absent/unclear clarification.
+#
+# Scoring the stored predictions against gold showed the failure mode had moved. Under the
+# previous prompt the base rate was finally right - gold 64.6% precursors against a model rate
+# of 66.2% - but 100% of the remaining synthetic misses and 90% of the OSHA misses were Gate 2:
+# the model called the control "present" or "unclear" where the humans read the narrative as
+# "absent" or "failed". Gate 2 agreement was 63% on synthetic and 33% on OSHA.
+#
+# The cause was one line: "Silence about controls is 'unclear', never 'absent'." True as
+# written, but the model applied it to reports that explicitly state a control was missing -
+# "no gas test was recorded", "the lanyard hung unclipped" - which is not silence, it is
+# evidence. "Unclear" then forces is_sif_precursor false regardless of severity, so every one
+# of those became a missed precursor.
+classify.version = "groq-openai/gpt-oss-20b-rubric-v2.2-g2fix1"

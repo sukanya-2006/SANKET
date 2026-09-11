@@ -409,12 +409,53 @@ document agree 88% of the time, no classifier can honestly claim 95%.
   §2 additionally makes explicit that `is_sif_precursor` is computed, never typed, after one
   annotator's typed values contradicted their own gate answers on 138 of 180 rows.
 
-  > **TO BE COMPLETED BY MEMBER 1.** A second labelling round produced raw 79.4%, kappa 0.595.
-  > Record here what actually changed between the rounds — whether both annotators re-labelled
-  > independently against a revised rubric, or the files were adjudicated. The two are different
-  > claims and only one of them is a ceiling. Until this line is filled in, quote the round-one
-  > number, not 0.595. Run `python check_independence.py` on the final pair before quoting
-  > anything.
+  **Measured on the final pair, 9 Sep**, from the raw annotator rows now in the `gold_labels`
+  table rather than from a merged CSV. Run `python agreement.py` to reproduce.
+
+  | | round one | final pair |
+  |---|---|---|
+  | `is_sif_precursor` | 52.2%, kappa 0.083 | **96.1%, kappa 0.922** |
+  | `severity` exact | 14.4% | 60.0%, kappa 0.452 |
+  | `severity` within one band | split by 3-4 points on 76 of 180 | **100% — 180 of 180** |
+  | Gate 1 `hazard_assessment` | — | 100%, kappa 1.000 |
+  | Gate 2 `control_status` | — | 98.8%, kappa 0.978 |
+
+  The revision worked, and it worked on the gate it was aimed at. Severity now never disagrees
+  by more than one band on any report in the set. Six of the seven remaining headline
+  disagreements straddle the 3/4 line, which is the boundary the label is defined on — that is
+  the residue you would expect from two careful people, not a broken instruction.
+
+  Read Gate 1's perfect agreement with the enrichment caveat: every synthetic report was
+  generated centred on a hazard category, so both annotators answered `yes` almost every time.
+  A kappa of 1.000 there reflects how the set was built.
+
+  Three figures have circulated for this pair and they are all real measurements of different
+  things. Quote the first and say which it is:
+
+  | what is compared | result |
+  |---|---|
+  | `is_sif_precursor` alone — the label the product predicts | 96.1%, kappa 0.922 |
+  | all four fields matching exactly | 58.3% |
+  | the three gates matching exactly, ignoring `lsr_rule` | 59.4% |
+
+  These are computed after `is_sif_precursor` is derived from the gates rather than read from
+  the annotators' typed column, per §2. `merge_labels.py` was comparing the typed column, and
+  that had corrupted the gold set in both directions:
+
+  - **Report 56** was held out awaiting a tiebreak it never needed. Both annotators recorded
+    identical gates and one typed the boolean wrongly, so they "disagreed".
+  - **Reports 51 and 96** were written into the gold set with annotator A's row taken as the
+    agreed answer, because a typed value matched while the gates did not. Nobody adjudicated
+    them. They have been withdrawn rather than resolved — picking a winner is adjudication.
+
+  The gold set went from 174 rows to 173. **Open tiebreaks: 10, 20, 51, 60, 96, 139, 149.**
+
+  > **STILL TO BE ANSWERED BY MEMBER 1 — the one thing no script can check.**
+  > Did akanksha and sukanya each label all 180 reports without seeing the other's file, and
+  > was neither file edited to match afterwards? Independent re-labelling against a revised
+  > rubric gives a ceiling. Adjudication into both files does not, however similar the numbers
+  > look. `agreement.py` cannot tell the two apart and neither can anything else.
+  > **Until this is answered, 0.922 is not quotable as a ceiling.**
 
 - **v2.1** — applied the three defects found by the [rubric red-team](red-team-reports.md) before
   labelling began, so no re-labelling is required. Added a chemical-hazard ruling (the eight IOGP

@@ -40,6 +40,43 @@ ORDER BY p.report_id, p.created_at DESC;
 
 
 -- ---------------------------------------------------------------------------
+-- name: latest_predictions_by_version
+-- One row per report PER MODEL VERSION: that version's newest judgement.
+--
+-- `latest_predictions` above answers a different question. It picks the newest
+-- prediction per report across ALL versions, which is right for the report list
+-- (what do we currently think about this report?) and wrong for aggregation.
+--
+-- Every aggregate below filters `l.model_version = :model_version`. Against the
+-- global-latest view that filter runs AFTER the newest row has been chosen, so a
+-- report whose newest row belongs to some other version is never re-resolved to
+-- its own row for the version asked for - it drops out of the result entirely.
+--
+-- That is not hypothetical. A classifier run that fell back to the baseline wrote
+-- 111 `stub-0.1.0` rows; those became the newest rows for 111 reports, and every
+-- one would have vanished from the site and activity rankings. No error, no
+-- warning, just smaller numbers that still looked plausible.
+--
+-- Partitioning by version first means the filter selects among rows that are each
+-- already the newest for their own version.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE VIEW latest_predictions_by_version AS
+SELECT DISTINCT ON (p.report_id, p.model_version)
+       p.report_id,
+       p.hazard_assessment,
+       p.lsr_rule,
+       p.control_status,
+       p.severity,
+       p.is_sif_precursor,
+       p.confidence,
+       p.is_fallback,
+       p.model_version,
+       p.created_at AS classified_at
+FROM predictions p
+ORDER BY p.report_id, p.model_version, p.created_at DESC;
+
+
+-- ---------------------------------------------------------------------------
 -- name: summary
 -- Totals, precursor rate, and the median seconds between a report arriving and
 -- being classified — the monthly-triage-to-seconds headline.
@@ -56,7 +93,7 @@ SELECT count(*)                                                     AS total_rep
        %(model_version)s                                            AS model_version,
        now()                                                        AS last_updated
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s;
 
@@ -73,7 +110,7 @@ SELECT r.site,
        mode() WITHIN GROUP (ORDER BY l.lsr_rule)
            FILTER (WHERE l.is_sif_precursor)      AS top_rule
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
   AND r.site IS NOT NULL
@@ -94,7 +131,7 @@ SELECT r.site,
        mode() WITHIN GROUP (ORDER BY l.lsr_rule)
            FILTER (WHERE l.is_sif_precursor)      AS top_rule
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
   AND r.site IS NOT NULL
@@ -114,7 +151,7 @@ SELECT r.activity,
        mode() WITHIN GROUP (ORDER BY l.lsr_rule)
            FILTER (WHERE l.is_sif_precursor)      AS top_rule
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
   AND r.activity IS NOT NULL
@@ -134,7 +171,7 @@ SELECT r.activity,
        mode() WITHIN GROUP (ORDER BY l.lsr_rule)
            FILTER (WHERE l.is_sif_precursor)      AS top_rule
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
   AND r.activity IS NOT NULL
@@ -153,7 +190,7 @@ SELECT l.lsr_rule,
        l.control_status,
        count(*) AS count
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
 GROUP BY l.lsr_rule, l.control_status
@@ -171,7 +208,7 @@ SELECT r.site,
        count(*) FILTER (WHERE l.is_sif_precursor) AS precursor_count,
        avg(l.is_sif_precursor::int)               AS precursor_rate
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
   AND r.site IS NOT NULL
@@ -190,7 +227,7 @@ SELECT to_char(date_trunc('month', r.report_date), 'YYYY-MM') AS month,
        count(*) FILTER (WHERE l.is_sif_precursor) AS precursor_count,
        avg(l.is_sif_precursor::int)               AS precursor_rate
 FROM reports r
-JOIN latest_predictions l ON l.report_id = r.report_id
+JOIN latest_predictions_by_version l ON l.report_id = r.report_id
 WHERE r.source <> 'osha'
   AND l.model_version = %(model_version)s
 GROUP BY date_trunc('month', r.report_date)

@@ -153,7 +153,10 @@ class SiteAggregate(BaseModel):
     report_count: int
     precursor_count: int
     precursor_rate: float = Field(ge=0.0, le=1.0)
-    top_rule: str
+    # Null when the group has no precursors at all - there is no most-common-rule among
+    # a site's precursors if it has none. The SQL says so directly: mode() over an empty
+    # FILTER returns NULL, and a required str made /aggregate/sites 500 on real data.
+    top_rule: str | None = None
 
 
 class ActivityAggregate(BaseModel):
@@ -161,7 +164,7 @@ class ActivityAggregate(BaseModel):
     report_count: int
     precursor_count: int
     precursor_rate: float = Field(ge=0.0, le=1.0)
-    top_rule: str
+    top_rule: str | None = None  # see SiteAggregate.top_rule
 
 
 class SiteAggregateResponse(BaseModel):
