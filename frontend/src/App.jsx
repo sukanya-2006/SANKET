@@ -56,10 +56,21 @@ function LandingPage() {
         <span className="text-center">SIH 2026 Prototype • Built for the Oil India SIF Problem Statement</span>
       </div>
 
-      {/* Hero Content */}
-      <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-center max-w-xl mb-3 sm:mb-4 tracking-tight leading-tight">
-        Keeping our field safe, <span className="text-[var(--accent)]">effortlessly.</span>
+      {/* Hero Content.
+
+          The product name goes here, not just in the browser tab. Every screenshot, every
+          screen-share and every photo of the demo crops to this area, and a landing page that
+          never says what the thing is called makes the deck and the app look like two
+          projects. SANKET is also the word the pitch uses out loud. */}
+      <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-center tracking-tight leading-none mb-2">
+        SANKET
       </h1>
+      <p className="text-[var(--accent)] text-center text-xs sm:text-sm font-semibold uppercase tracking-[0.2em] mb-5 sm:mb-6">
+        SIF Precursor Detection
+      </p>
+      <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center max-w-xl mb-3 sm:mb-4 tracking-tight leading-tight">
+        Keeping our field safe, <span className="text-[var(--accent)]">effortlessly.</span>
+      </h2>
       <p className="text-[var(--ink-soft)] text-center max-w-md mb-10 sm:mb-12 text-sm md:text-base leading-relaxed px-2">
         Choose your operational role below to log an active field hazard or access the safety administrative triage and AI reasoning hub.
       </p>
