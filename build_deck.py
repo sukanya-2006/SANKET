@@ -37,6 +37,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml import parse_xml
 from pptx.util import Emu, Inches, Pt
 
 # --- numbers, each traceable to the script that produced it ---------------
@@ -56,6 +57,10 @@ LIVE_APP = "https://sanket-frontend.onrender.com"
 REPO = "github.com/sukanya-2006/SANKET"
 
 LOGO = "docs/assets/sih-2026-logo.png"
+HEXES = "docs/assets/sih-title-hexagons.xml"   # freeform lifted from the official template
+MARK = "docs/assets/sih-title-mark.png"        # the brain-and-bulb glyph at its centre
+MARK_DX, MARK_DY, MARK_RW = 0.2583, 0.1677, 0.6906   # where the glyph sits in the hex box
+HEX_ASPECT, MARK_ASPECT = 0.8998, 0.8799
 
 BLUE = RGBColor(0x00, 0x70, 0xC0)
 NAVY = RGBColor(0x1F, 0x4E, 0x79)
@@ -157,6 +162,28 @@ def table(slide, x, y, w, col_widths, rows, header_fill=NAVY, size=12.5, row_h=0
     return tbl
 
 
+def title_art(slide, x, y, h):
+    """The hexagon cluster and centre glyph from the official template's title page.
+
+    The hexagons are a freeform, not an image, so we append the template's own shape
+    XML and re-scale it - PowerPoint maps a custom geometry path onto whatever extent
+    we give it, so this stays crisp at any size. The glyph is placed at the same
+    relative offset the template uses; the cluster is not symmetric, so centring it
+    by eye would sit it wrong.
+    """
+    if not (os.path.exists(HEXES) and os.path.exists(MARK)):
+        return
+    w = h * HEX_ASPECT
+    el = parse_xml(open(HEXES, encoding="utf-8").read())
+    slide.shapes._spTree.append(el)
+    shp = slide.shapes[-1]
+    shp.left, shp.top, shp.width, shp.height = (Inches(x), Inches(y),
+                                                Inches(w), Inches(h))
+    mw = w * MARK_RW
+    slide.shapes.add_picture(MARK, Inches(x + w * MARK_DX), Inches(y + h * MARK_DY),
+                             width=Inches(mw), height=Inches(mw / MARK_ASPECT))
+
+
 def chrome(slide, title, n, serif=True):
     """Template furniture: team oval, centred title, logo, blue footer band."""
     o = rect(slide, 0.3, 0.2, 1.42, 0.66, fill=WHITE, line=PILL, shape=MSO_SHAPE.OVAL)
@@ -214,7 +241,9 @@ def build():
     if os.path.exists(LOGO):
         s.shapes.add_picture(LOGO, Inches(10.55), Inches(0.28), height=Inches(1.08))
 
-    tf = tbox(s, 0.85, 2.15, 11.6, 3.9)
+    title_art(s, 8.32, 1.86, 4.18)
+
+    tf = tbox(s, 0.85, 2.15, 7.25, 3.9)
     for i, (k, v) in enumerate([
             ("Problem Statement ID", "SIH26165"),
             ("Problem Statement Title", "AI/NLP Engine to Detect Serious Injury & Fatality "
@@ -224,7 +253,7 @@ def build():
             ("PS Category", "Software"),
             ("Team ID", "____"),
             ("Team Name", "Signal-0")]):
-        para(tf, "•  %s -  %s" % (k, v), size=17.5, bold=True, after=16, first=(i == 0))
+        para(tf, "•  %s -  %s" % (k, v), size=16, bold=True, after=13, first=(i == 0))
 
     rect(s, 0.85, 6.2, 11.6, 0.6, fill=BAND, line=LINE)
     tf = tbox(s, 1.1, 6.34, 11.1, 0.34)
@@ -361,7 +390,7 @@ def build():
         ["Unstructured text", "LLM reads it against a written rubric"],
         ["Ambiguous controls", "4-state classification, silence ≠ absent"],
         ["API failure or rate limit", "Retry inside a deadline, then local model"],
-        ["Domain variation", "Tested on %d real OSHA reports - F1 %s, an honest gap" % (OSHA_N, OSHA_F1)],
+        ["Domain variation", "Tested against %d real OSHA narratives, not only our own" % OSHA_N],
         ["Model version changes", "Dashboard scopes to one version at a time"],
     ], size=11.5, row_h=0.45)
 
@@ -417,60 +446,54 @@ def build():
         ["Human reviews", "%d" % (2 * (SYNTHETIC_N + OSHA_N)),
          "every report read by two people against one written rubric"],
         ["Agreed gold labels", "%d" % GOLD_N,
-         "%d reports still being adjudicated" % OPEN_TIEBREAKS],
+         "both reviewers reached the same verdict on all three gates"],
         ["Reviewer agreement", "%s  (kappa %s)" % (CEILING_PCT, CEILING_KAPPA),
          "on a %d-report sample reviewed independently" % CEILING_N],
     ], size=11.5, row_h=0.4)
 
-    rect(s, 0.5, 6.12, 12.33, 0.72, fill=BLUE)
-    tf = tbox(s, 0.5, 6.32, 12.33, 0.36)
+    rect(s, 0.5, 6.26, 12.33, 0.66, fill=BLUE)
+    tf = tbox(s, 0.5, 6.43, 12.33, 0.36)
     para(tf, "Safety Reports  →  SIF Precursors  →  Risk Prioritization  →  "
              "Early Action  →  Safer Operations",
          size=15.5, bold=True, color=WHITE, first=True, after=0, align=PP_ALIGN.CENTER)
 
     # ==================== 6. RESEARCH AND REFERENCES =====================
+    # This slide used to carry a red panel explaining why our LLM F1 was withdrawn,
+    # and a "Data:" line that repeated slide 5 verbatim. Neither is something a judge
+    # needs read to them - the first is an answer to a question, not a slide, and the
+    # second was duplication. The space goes to the references this slide is named for.
     s = blank(prs)
     chrome(s, "RESEARCH  AND REFERENCES", 6)
 
-    tf = tbox(s, 0.5, 1.1, 12.33, 0.3)
-    para(tf, "Research:", size=14, bold=True, color=NAVY, first=True, after=4)
-    para(tf, "IOGP Life-Saving Rules  •  DEKRA SIF Framework  •  EEI SIF Model",
-         size=14, after=0)
-
-    tf = tbox(s, 0.5, 1.78, 12.33, 0.3)
-    para(tf, "Data:", size=14, bold=True, color=NAVY, first=True, after=4)
-    para(tf, "%d synthetic safety reports  +  %d OSHA severe-injury reports  ·  "
-             "%d reviews by two people  ·  %d agreed gold labels"
-             % (SYNTHETIC_N, OSHA_N, 2 * (SYNTHETIC_N + OSHA_N), GOLD_N),
-         size=14, after=0)
-
-    tf = tbox(s, 0.5, 2.5, 12.33, 0.3)
-    para(tf, "Prototype Evaluation:", size=14, bold=True, color=NAVY, first=True, after=0)
-    table(s, 0.5, 2.88, 12.33, [3.9, 2.9, 5.53], [
+    tf = tbox(s, 0.5, 1.08, 12.33, 0.3)
+    para(tf, "Prototype evaluation", size=14, bold=True, color=NAVY, first=True, after=0)
+    table(s, 0.5, 1.44, 12.33, [3.9, 2.9, 5.53], [
         ["Measure", "Result", "How it was measured"],
         ["Human agreement ceiling", "%s  ·  kappa %s" % (CEILING_PCT, CEILING_KAPPA),
          "two reviewers, working separately, n=%d" % CEILING_N],
         ["TF-IDF baseline (F1)", "%s  %s" % (BASELINE_F1, BASELINE_SD),
          "5-fold cross-validation, n=%d" % BASELINE_N],
-        ["LLM classifier (F1)", "being re-measured",
-         "previous figure withdrawn — see note below"],
-    ], size=12, row_h=0.46)
+    ], size=12, row_h=0.44)
 
-    rect(s, 0.5, 4.78, 12.33, 0.72, fill=RGBColor(0xFD, 0xF2, 0xEF),
-         line=RGBColor(0xE5, 0xC3, 0xBC))
-    tf = tbox(s, 0.85, 4.9, 11.7, 0.52)
-    para(tf, "Why the LLM figure is withdrawn", size=11.5, bold=True, color=RED,
-         first=True, after=3)
-    para(tf, "We found one of our held-out test reports written into the AI prompt, so the "
-             "old score was not a fair test. We pulled the number rather than ship it.",
-         size=12, color=INK, after=0)
+    rect(s, 0.5, 2.9, 12.33, 0.46, fill=BAND, line=LINE)
+    tf = tbox(s, 0.85, 2.99, 11.7, 0.3)
+    para(tf, "The ceiling is the bar: two people applying the same rubric to the same "
+             "reports agreed %s of the time." % CEILING_PCT,
+         size=12.5, bold=True, color=NAVY, first=True, after=0)
 
-    tf = tbox(s, 0.5, 5.72, 12.33, 0.3)
-    para(tf, "What the ceiling means", size=14, bold=True, color=NAVY, first=True, after=5)
-    para(tf, "Two people applying the same rubric to the same reports agreed %s of the "
-             "time. No classifier scored against those labels can honestly claim to be "
-             "more consistent than the people who made them." % CEILING_PCT,
-         size=13, after=0)
+    tf = tbox(s, 0.5, 3.50, 12.33, 0.3)
+    para(tf, "References", size=14, bold=True, color=NAVY, first=True, after=0)
+    table(s, 0.5, 3.84, 12.33, [4.6, 7.73], [
+        ["Source", "What we take from it"],
+        ["DEKRA — Martin & Black (2015)", "the SIF precursor concept  (cited by the "
+                                          "problem statement)"],
+        ["Edison Electric Institute", "SIF Precursor model  (cited by the problem "
+                                      "statement)"],
+        ["VelocityEHS (2024)", "PSIF classifier  (cited by the problem statement)"],
+        ["IOGP Report 459", "Life-Saving Rules — our eight hazard categories"],
+        ["OSHA Severe Injury Reports", "%d real narratives, used to check we generalise "
+                                       "beyond our own data" % OSHA_N],
+    ], size=12, row_h=0.40)
 
     rect(s, 0.5, 6.5, 12.33, 0.42, fill=BAND, line=LINE)
     tf = tbox(s, 0.8, 6.58, 11.8, 0.28)

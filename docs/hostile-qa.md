@@ -291,6 +291,38 @@ find one for you.
 
 ---
 
+---
+
+## Off the slides, still fair game
+
+Three things were cut from the deck because a six-slide submission is not the place to
+narrate our own process. None of them is a secret. If a judge asks, answer plainly.
+
+### "What is your LLM's F1?"
+
+> We are not quoting one. We found one of our held-out test reports written into the
+> prompt as a worked example, so the score we had measured was not a fair test. We pulled
+> it and removed the example. The re-run is rate-limited by the free API tier, so the
+> honest answer today is that our only defensible model number is the local baseline,
+> 0.754 on five-fold cross-validation.
+
+**Do not say:** any LLM F1, current or remembered. **Do say** which number we do have.
+
+### "How does it do on the real OSHA reports?"
+
+> Worse than on our own data, and we know the figure: F1 0.118 on those 30. That is a
+> domain-transfer gap, not a broken model - the OSHA narratives are written differently
+> from the reports our rubric was calibrated on. It is the strongest argument for
+> fine-tuning on OIL's own historical reports before any real deployment.
+
+**Do not say:** "it generalises". It does not yet, and the number is public in our repo.
+
+### "Are all 180 reports labelled?"
+
+> 173 have an agreed label. Seven are still open because the two reviewers reached
+> different verdicts and we adjudicate rather than pick a side. Every number on our
+> slides is computed on the 173.
+
 ## Live drill format
 
 For the interactive version, run it like this:
