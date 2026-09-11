@@ -52,15 +52,15 @@ export default function WorkerAnalyzer() {
 
   return (
     <div className="min-h-screen bg-[#dce4e1] text-[#2c3e37] flex flex-col items-center justify-start p-4 md:p-8">
-      <div className="w-full max-w-xl flex justify-between items-center mb-8">
+      <div className="w-full max-w-xl flex flex-wrap justify-between items-center gap-3 mb-6 md:mb-8">
         <Link
           to="/"
-          className="text-sm font-semibold tracking-wide uppercase opacity-70 hover:opacity-100 transition-opacity"
+          className="text-xs sm:text-sm font-semibold tracking-wide uppercase opacity-70 hover:opacity-100 transition-opacity"
         >
           ← Back Home
         </Link>
 
-        <div className="flex items-center gap-2 bg-white/80 px-4 py-2 rounded-full text-sm font-medium shadow-sm">
+        <div className="flex items-center gap-2 bg-white/80 px-3 sm:px-4 py-2 rounded-full text-sm font-medium shadow-sm">
           <span>🌐</span>
           <select
             value={language}
@@ -74,7 +74,7 @@ export default function WorkerAnalyzer() {
         </div>
       </div>
 
-      <div className="w-full max-w-xl bg-white/90 rounded-[2rem] p-6 md:p-10 shadow-xl border border-white/50">
+      <div className="w-full max-w-xl bg-white/90 rounded-[2rem] p-5 sm:p-6 md:p-10 shadow-xl border border-white/50">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#52796f]/10 text-[#354f52] mb-3">
             <ShieldCheck className="w-7 h-7" />
@@ -94,7 +94,7 @@ export default function WorkerAnalyzer() {
                 type="button"
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={isTranscribing}
-                className={`flex flex-col items-center justify-center w-28 h-28 rounded-full shadow-lg transition-all ${
+                className={`flex flex-col items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-lg transition-all ${
                   isRecording ? 'bg-rose-500 animate-pulse' : 'bg-[#52796f] hover:bg-[#3f5f57]'
                 } disabled:opacity-60`}
               >
