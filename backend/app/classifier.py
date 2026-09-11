@@ -213,7 +213,21 @@ def classify(report_text: str, *, use_cache: bool = True) -> Outcome:
             log.error("baseline classifier failed: %s: %s", type(exc).__name__, exc)
             raise ClassificationUnavailable(str(exc)) from exc
 
-    if use_cache:
+    if use_cache and not is_fallback:
+        # Never cache a degraded answer.
+        #
+        # The cache has no expiry, so caching the baseline result pins it to that report
+        # forever: every later call returns it instantly, with no error, no log line and no
+        # network request. One bad minute from the model becomes a permanent silent
+        # downgrade, and there is no way back except deleting the row by hand.
+        #
+        # It is not theoretical. A run against a groq client that could not call the model at
+        # all wrote 56 stub answers into the cache under the live prompt version. It was also
+        # what made that bug so hard to find: calling the classifier directly worked, and
+        # calling it through the cache did not.
+        #
+        # A fallback that is recomputed next time and succeeds is not an inconsistency. It is
+        # the system recovering, which is the whole point of having a degraded mode.
         cache.put(report_text, result, model_version)
 
     return Outcome(

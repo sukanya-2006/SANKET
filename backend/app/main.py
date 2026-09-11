@@ -46,16 +46,39 @@ app.include_router(router)
 # so a stub answering in production is visible rather than silent.
 log = logging.getLogger(__name__)
 
+# Registered SEPARATELY from the transcription router on purpose.
+#
+# These two used to share one try block, and they fail for completely unrelated reasons. A
+# missing `python-multipart` - which only the /transcribe upload needs - raised inside
+# include_router, was caught here, and took the Groq classifier down with it. The API then ran
+# every request on the baseline while logging "check GROQ_API_KEY", which is not the problem
+# and sends whoever reads it in the wrong direction entirely.
+#
+# One try block per thing that can fail on its own, and each message names its own cause.
 try:
     from . import classifier_llm
-    from .api import transcribe
-    app.include_router(transcribe.router)
 
     classifier.register_primary(classifier_llm.classify)
 except Exception as exc:  # noqa: BLE001
     log.warning(
         "real classifier unavailable (%s: %s) — running on the baseline. "
-        "Check GROQ_API_KEY and `pip install -r requirements.txt`.",
+        "Check GROQ_API_KEY and that `groq` is installed.",
+        type(exc).__name__,
+        exc,
+    )
+
+# Voice transcription. Needs python-multipart for the file upload; without it FastAPI raises
+# when the route is registered, not when it is called. Losing this endpoint costs the voice
+# recorder on the worker screen and nothing else - classification is unaffected.
+try:
+    from .api import transcribe
+
+    app.include_router(transcribe.router)
+except Exception as exc:  # noqa: BLE001
+    log.warning(
+        "/transcribe unavailable (%s: %s) — the voice recorder will not work. "
+        "This usually means python-multipart is missing: `pip install -r requirements.txt`. "
+        "Text classification is unaffected.",
         type(exc).__name__,
         exc,
     )

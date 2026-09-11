@@ -103,11 +103,41 @@ export const api = {
   // ----------------------------------------
   // SITE RISK RANKING
   // ----------------------------------------
+  //
+  // The endpoint returns { ranked, insufficient_volume, min_group_n }, NOT an array and
+  // not a `sites` key. AdminDashboard read `siteData.sites`, which is undefined, so it
+  // always fell through to hardcoded chart data - the "Live Aggregates" panel had never
+  // once shown a real number.
+  //
+  // `ranked` is what to chart. `insufficient_volume` is the groups that fell below
+  // min_group_n: real sites with too few reports to rate honestly. They are returned
+  // rather than dropped so the UI can grey them out instead of pretending they do not
+  // exist, which is the whole point of the small-denominator guard.
   getSites: async () => {
 
     const res = await fetch(
       `${BASE_URL}/aggregate/sites`
     );
+
+    const body = await handleResponse(res);
+
+    return {
+      ranked: body.ranked ?? [],
+      insufficientVolume: body.insufficient_volume ?? [],
+      minGroupN: body.min_group_n ?? 0
+    };
+  },
+
+
+  // ----------------------------------------
+  // HEALTH - IS THIS REAL DATA OR THE SEEDED STUB?
+  // ----------------------------------------
+  //
+  // `data_source` is "postgres" or "seeded_stub". The dashboard shows a badge when it is
+  // the stub, so nobody reads fixture numbers off a screen believing they are live.
+  getHealth: async () => {
+
+    const res = await fetch(`${BASE_URL}/health`);
 
     return handleResponse(res);
   },

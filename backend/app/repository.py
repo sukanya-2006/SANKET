@@ -1,10 +1,11 @@
-﻿"""
+"""
 Repository — all report reads go through this file.
 
 When the database is configured, reports are read directly from Postgres.
 Worker-submitted reports and their latest predictions are joined together.
 
-No seeded data is mixed into the live database mode.
+No seeded data is ever mixed into live database mode. The stub answers only when there
+is no database, or when the one there is cannot be reached - see all_reports().
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import logging
 
 from . import db
 from .schemas import ReportDetail, ReportSummary
+from .stub import REPORTS as STUB_REPORTS
 
 log = logging.getLogger(__name__)
 
@@ -84,34 +86,63 @@ def _rows_from_db() -> list[ReportDetail]:
                 ReportDetail(**row)
             )
 
-        except Exception as exc:
-            log.exception(
-                "Failed to convert database row to ReportDetail. "
-                "report_id=%s error=%s",
-                row.get("report_id"),
-                exc,
+        except Exception as exc:  # noqa: BLE001
+            # Skip the row, keep the rest. Re-raising here meant one report with a bad
+            # enum value emptied the entire dashboard, and the log line pointing at the
+            # culprit scrolled past while everyone looked at the blank screen instead.
+            log.error(
+                "Skipping unreadable report row. report_id=%s error=%s: %s",
+                row.get("report_id"), type(exc).__name__, exc,
             )
-            raise
+
+    if rows and not reports:
+        # Every single row failed to parse. That is a schema mismatch, not bad data, and
+        # silently returning nothing would look exactly like an empty database.
+        raise RuntimeError(
+            "all %d report rows failed to parse - the database schema and "
+            "ReportDetail have diverged" % len(rows)
+        )
 
     return reports
 
 
 def all_reports() -> list[ReportDetail]:
     """
-    Return reports from the live database.
+    Return reports from the live database, or the seeded stub when there is no database.
 
-    We deliberately do NOT fall back to seeded reports when a database
-    is configured. Mixing live and fake data makes dashboard debugging
-    extremely confusing.
+    Three cases, and they are not the same thing:
+
+    1. A database is configured and answers. Live rows only. Seeded data is NEVER mixed in -
+       a dashboard showing half real and half fixture rows is impossible to debug, and that
+       rule stays exactly as it was written.
+
+    2. A database is configured and fails. The stub answers and the error is logged loudly.
+       A dashboard showing fixture data is recoverable; one that 500s mid-demo is not, and a
+       free-tier Postgres instance going to sleep is a thing that actually happens.
+
+    3. No database is configured at all. The stub answers. This is not a fallback, it is the
+       documented development mode - Member 5 builds screens against it and the test suite
+       runs entirely in it. Returning an empty list here made a fresh clone serve an API with
+       no data in it, which broke seven tests and every frontend that had not been pointed at
+       Supabase yet.
+
+    Callers never have to know which case they are in, but anyone can ask: /health reports
+    `data_source` as either `postgres` or `seeded_stub`, so the mode is always visible and
+    never has to be inferred from the data looking fake.
     """
 
     if not live():
-        log.warning(
-            "Database is not configured. Returning no reports."
-        )
-        return []
+        log.info("No database configured - serving the seeded stub (see /health data_source)")
+        return STUB_REPORTS
 
-    return _rows_from_db()
+    try:
+        return _rows_from_db()
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "Database read failed, serving the seeded stub so the dashboard stays up: %s: %s",
+            type(exc).__name__, exc,
+        )
+        return STUB_REPORTS
 
 
 def list_reports(

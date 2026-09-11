@@ -1,4 +1,4 @@
-﻿"""Database access - plain parameterised SQL against Supabase Postgres.
+"""Database access - plain parameterised SQL against Supabase Postgres.
 
 Supabase is Postgres, so we connect with psycopg over the connection string rather than through
 the REST client. That is deliberate: it lets the aggregation execute the exact statements in
@@ -125,6 +125,7 @@ def apply_schema() -> None:
     with connection() as conn, conn.cursor() as cur:
         cur.execute(SCHEMA_SQL.read_text(encoding="utf-8"))
         cur.execute(statement("latest_predictions"))
+        cur.execute(statement("latest_predictions_by_version"))
     log.info("schema applied")
 
 
