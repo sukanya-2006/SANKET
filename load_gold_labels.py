@@ -8,15 +8,26 @@ Loads the human labels into the live Supabase `gold_labels` table.
 
 WHAT IT LOADS
 
-  data/global_labels_akanksha2M6.csv   annotator 'akanksha'   independent
-  data/global_labels_sukanya2M6.csv    annotator 'sukanya'    independent
+  data/global_labels_akanksha2M6.csv   annotator 'akanksha'   round two
+  data/global_labels_sukanya2M6.csv    annotator 'sukanya'    round two
   data/gold_labels.csv                 annotator 'agreed'     adjudicated
 
-Both independent files are loaded, not just the adjudicated set. Cohen's kappa
-is only meaningful if the two annotators' raw judgements survive somewhere, and
-"two of us labelled independently and agreed X% of the time" is the answer to
-"you wrote the reports and graded yourself". Keeping only the merged row throws
-that away.
+Both annotator files are loaded, not just the adjudicated set, so each person's
+raw judgement survives and the two can still be compared field by field.
+
+THESE ARE ROUND-TWO FILES AND ROUND TWO WAS NOT INDEPENDENT. The team lead
+confirmed on 11 September that the annotators did not work separately the second
+time, so the 96.1% agreement / kappa 0.922 these rows produce is NOT a ceiling
+and must not be quoted as one. It is evidence that the v2.1 -> v2.2 rubric
+revision helped, which is a real finding, and nothing stronger.
+
+Round one WAS independent and agreed 52.2%, kappa 0.083. That is the only
+independent number this project has, and it describes rubric v2.1, whose
+severity gate has since been rewritten.
+
+For a number that can be quoted without a caveat, run
+prepare_independent_recheck.py - it samples 40 reports for a fresh independent
+pass, which is about two hours of two people's time.
 
 WHAT IT CORRECTS, AND WHY THAT IS NOT RELABELLING
 

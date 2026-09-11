@@ -1,42 +1,95 @@
-========================================================================
-  SIF PRECURSOR DETECTION ΓÇö EVALUATION
-========================================================================
-
-  Gold labels: 174  (144 synthetic, 30 OSHA)
-  Positive class (synthetic): 85/144 = 59.0%   [!] outside the plan's 20-25% band
-
-  [!] 6 of the 120 scoring-pool reports have no gold
-      label yet (awaiting tiebreak). Scoring the remainder.
-
-  Scoring pool: 114 reports. The 30 dev reports are
-  excluded ΓÇö the LLM prompt was tuned on them.
-
-  TABLE 1 ΓÇö Synthetic, 2-fold CV  (the fair fight)
-  ----------------------------------------------------------------------------
-                        F1 (mean ┬▒ sd) PR-AUC (mean ┬▒ sd)       prec   recall      n
-  TF-IDF baseline        0.784 ┬▒ 0.048     0.829 ┬▒ 0.050      0.743    0.831    114
-      classified 25/114
-      classified 50/114
-      classified 75/114
-      classified 100/114
-  [!] 5/114 answers came from the FALLBACK, not the LLM.
-      Those are baseline answers wearing the LLM's label. Fix before quoting.
-
-  LLM classifier         0.719 ┬▒ 0.044     0.581 ┬▒ 0.052      0.730    0.708    114
-
-  Severity MAE (LLM, precursor cases only): 0.97  on 65 reports
-
-  TABLE 2 ΓÇö OSHA set, LLM only  (generalisation check)
-  ----------------------------------------------------------------------------
-  Real writing nobody on the team produced. The baseline is trained on
-  synthetic reports, so scoring it here would measure domain transfer
-  rather than model quality ΓÇö an unfair fight we do not stage.
-
-      classified 25/30
-  LLM classifier       F1 0.286   PR-AUC 0.336   prec 0.500   recall 0.200   n 30
-
-========================================================================
-  Accuracy is deliberately absent. At ~22% positives, answering 'no' to
-  everything scores 78%. Report F1 and PR-AUC, and quote the ceiling.
-========================================================================
-
+=== STALE CAPTURE - read the header before the numbers ===
+
+This is output from a run predating 11 September. It ends by telling you to "quote the
+ceiling". Do not. Round two was not labelled independently, so its 96.1% / kappa 0.922 is
+not a ceiling; run_eval.py no longer prints that line and now says so explicitly.
+
+Kept because docs/eval-diagnosis.md cites it as the source for the baseline-versus-LLM
+diagnosis, which is still accurate. Regenerate with: python eval/run_eval.py --no-llm
+
+=========================================================
+
+========================================================================
+
+  SIF PRECURSOR DETECTION ΓÇö EVALUATION
+
+========================================================================
+
+
+
+  Gold labels: 174  (144 synthetic, 30 OSHA)
+
+  Positive class (synthetic): 85/144 = 59.0%   [!] outside the plan's 20-25% band
+
+
+
+  [!] 6 of the 120 scoring-pool reports have no gold
+
+      label yet (awaiting tiebreak). Scoring the remainder.
+
+
+
+  Scoring pool: 114 reports. The 30 dev reports are
+
+  excluded ΓÇö the LLM prompt was tuned on them.
+
+
+
+  TABLE 1 ΓÇö Synthetic, 2-fold CV  (the fair fight)
+
+  ----------------------------------------------------------------------------
+
+                        F1 (mean ┬▒ sd) PR-AUC (mean ┬▒ sd)       prec   recall      n
+
+  TF-IDF baseline        0.784 ┬▒ 0.048     0.829 ┬▒ 0.050      0.743    0.831    114
+
+      classified 25/114
+
+      classified 50/114
+
+      classified 75/114
+
+      classified 100/114
+
+  [!] 5/114 answers came from the FALLBACK, not the LLM.
+
+      Those are baseline answers wearing the LLM's label. Fix before quoting.
+
+
+
+  LLM classifier         0.719 ┬▒ 0.044     0.581 ┬▒ 0.052      0.730    0.708    114
+
+
+
+  Severity MAE (LLM, precursor cases only): 0.97  on 65 reports
+
+
+
+  TABLE 2 ΓÇö OSHA set, LLM only  (generalisation check)
+
+  ----------------------------------------------------------------------------
+
+  Real writing nobody on the team produced. The baseline is trained on
+
+  synthetic reports, so scoring it here would measure domain transfer
+
+  rather than model quality ΓÇö an unfair fight we do not stage.
+
+
+
+      classified 25/30
+
+  LLM classifier       F1 0.286   PR-AUC 0.336   prec 0.500   recall 0.200   n 30
+
+
+
+========================================================================
+
+  Accuracy is deliberately absent. At ~22% positives, answering 'no' to
+
+  everything scores 78%. Report F1 and PR-AUC, and quote the ceiling.
+
+========================================================================
+
+
+

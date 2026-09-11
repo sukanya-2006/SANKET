@@ -384,8 +384,11 @@ EHS or industrial-engineering contact outside the team. Record the reviewer's na
 6. **Every label records `rubric_version`.** A label made under v2.0 and one made under v2.1 are
    not the same measurement.
 
-Agreement is also the ceiling on every number we report afterwards. If two humans applying this
-document agree 88% of the time, no classifier can honestly claim 95%.
+Agreement measured this way is also the ceiling on every number we report afterwards. If two
+humans applying this document *independently* agree 88% of the time, no classifier can honestly
+claim 95%. Step 1 is what makes that true. An agreement number produced after the two annotators
+have compared files measures reconciliation, not the rubric, and bounds nothing — see the v2.2
+changelog.
 
 ---
 
@@ -412,9 +415,13 @@ document agree 88% of the time, no classifier can honestly claim 95%.
   **Measured on the final pair, 9 Sep**, from the raw annotator rows now in the `gold_labels`
   table rather than from a merged CSV. Run `python agreement.py` to reproduce.
 
-  | | round one | final pair |
+  Round one was independent — both annotators labelled all 180 reports with no contact, per
+  §10.1. The final pair was **not** run that way, so read its column as evidence the revision
+  worked on the gate it was aimed at, never as a bound on anything downstream.
+
+  | | round one (independent) | final pair (**not** independent) |
   |---|---|---|
-  | `is_sif_precursor` | 52.2%, kappa 0.083 | **96.1%, kappa 0.922** |
+  | `is_sif_precursor` | 52.2%, kappa 0.083 | 96.1%, kappa 0.922 — not independent, not a ceiling |
   | `severity` exact | 14.4% | 60.0%, kappa 0.452 |
   | `severity` within one band | split by 3-4 points on 76 of 180 | **100% — 180 of 180** |
   | Gate 1 `hazard_assessment` | — | 100%, kappa 1.000 |
@@ -430,11 +437,11 @@ document agree 88% of the time, no classifier can honestly claim 95%.
   A kappa of 1.000 there reflects how the set was built.
 
   Three figures have circulated for this pair and they are all real measurements of different
-  things. Quote the first and say which it is:
+  things. Quote the first, say which it is, and say it was not measured independently:
 
   | what is compared | result |
   |---|---|
-  | `is_sif_precursor` alone — the label the product predicts | 96.1%, kappa 0.922 |
+  | `is_sif_precursor` alone — the label the product predicts | 96.1%, kappa 0.922 — not independent, not a ceiling |
   | all four fields matching exactly | 58.3% |
   | the three gates matching exactly, ignoring `lsr_rule` | 59.4% |
 
@@ -450,12 +457,21 @@ document agree 88% of the time, no classifier can honestly claim 95%.
 
   The gold set went from 174 rows to 173. **Open tiebreaks: 10, 20, 51, 60, 96, 139, 149.**
 
-  > **STILL TO BE ANSWERED BY MEMBER 1 — the one thing no script can check.**
-  > Did akanksha and sukanya each label all 180 reports without seeing the other's file, and
-  > was neither file edited to match afterwards? Independent re-labelling against a revised
-  > rubric gives a ceiling. Adjudication into both files does not, however similar the numbers
-  > look. `agreement.py` cannot tell the two apart and neither can anything else.
-  > **Until this is answered, 0.922 is not quotable as a ceiling.**
+  > **ANSWERED BY MEMBER 1 — and the answer is no.** Round one was run to §10.1: akanksha and
+  > sukanya each labelled all 180 reports without seeing the other's file, and it agreed 52.2%,
+  > kappa 0.083. Round two was not run that way — they worked differently, by discussion or by
+  > one adjudicating into both files. Independent re-labelling against a revised rubric gives a
+  > ceiling; adjudication into both files does not, however similar the numbers look, and
+  > `agreement.py` cannot tell the two apart.
+  > **So 96.1% / kappa 0.922 is not quotable as a ceiling, a bound, or a number to beat.** It is
+  > evidence that the v2.1 → v2.2 revision fixed the gate it was aimed at — which is what it was
+  > run to check — and nothing stronger. The 173 agreed rows remain perfectly good gold labels;
+  > what we lost is one claim about them, not the labels.
+  >
+  > **To get a ceiling we can defend:** re-label a fresh ~40-report subset independently — no
+  > contact between the two annotators, v2.2 in front of both, `agreement.py` on the result.
+  > That is a couple of hours, and we would rather report that number than one we cannot
+  > stand behind.
 
 - **v2.1** — applied the three defects found by the [rubric red-team](red-team-reports.md) before
   labelling began, so no re-labelling is required. Added a chemical-hazard ruling (the eight IOGP

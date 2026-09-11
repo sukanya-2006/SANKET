@@ -13,10 +13,13 @@ WHY THIS EXISTS
 The batch as delivered is split DISJOINTLY - one annotator has reports
 181-680, the other 681-1180, with zero overlap. That produces a thousand
 labels and no Cohen's kappa, because agreement can only be measured on
-reports both people judged. "Two of us labelled independently and agreed X%
-of the time - that's the ceiling" is the strongest sentence in the pitch and
-the whole answer to "you wrote the reports and graded yourself". A disjoint
-split cannot support it at any volume.
+reports both people judged. We have no independent kappa to quote yet: round
+one was independent and scored 52.2% agreement, kappa 0.083. Round two scored
+96.1% / kappa 0.922 but was NOT run independently - it is evidence the v2.1 ->
+v2.2 severity revision worked, not a ceiling, and must not be quoted as one.
+"Two of us labelled independently and agreed X% of the time" is the answer to
+"you wrote the reports and graded yourself", and only a genuinely independent
+pass can produce it. A disjoint split cannot support one at any volume.
 
 THE DESIGN THIS PRODUCES
 
@@ -26,8 +29,15 @@ THE DESIGN THIS PRODUCES
                    -> labelling volume for training and evaluation
 
 That is the standard arrangement: double-annotate a subset to measure
-agreement, single-annotate the rest for volume. You get a real ceiling AND a
-large gold set, rather than trading one for the other.
+agreement, single-annotate the rest for volume. Provided the shared core is
+genuinely labelled independently, you get a quotable kappa AND a large gold
+set, rather than trading one for the other.
+
+If a quotable kappa is all you need, prepare_independent_recheck.py is the
+cheaper path: it samples 40 of the existing 180 reports for a fresh
+independent re-label, and the worksheets already exist at
+data/recheck_akanksha.csv and data/recheck_sukanya.csv. This batch is still
+worth running, for the labelling volume and the base rate below.
 
 The shared reports are interleaved and shuffled independently in each
 worksheet, so neither annotator can tell which rows are the measured ones.
@@ -214,7 +224,14 @@ def main():
     print(f"\n  Then, on the shared core only:")
     print(f"    python check_independence.py --a {path_a} --b {path_b}")
     print("  It reports agreement over the report_ids present in both, which is exactly")
-    print("  the shared core. That number is the ceiling — on real text nobody wrote.\n")
+    print("  the shared core. If this pass is genuinely kept independent, that number")
+    print("  is a real ceiling — on real text nobody wrote, and the first one we have.")
+    print("  Round one was independent and scored kappa 0.083; round two scored 0.922")
+    print("  but was not independent, so it is not a ceiling and does not set a bar.")
+    print("")
+    print("  Cheaper path to the same number, if you want it before this batch lands:")
+    print("    python prepare_independent_recheck.py")
+    print("  40 of the existing 180 reports, re-labelled independently.\n")
 
 
 if __name__ == "__main__":

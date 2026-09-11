@@ -6,7 +6,7 @@ asked any question, so "that's not my section" is not an available answer.
 Three judges, in character:
 
 - **Judge A — ML professor.** Evaluation design, leakage, synthetic-data circularity, why not
-  fine-tune, what F1 hides, prompt overfitting, whether the ceiling logic is sound.
+  fine-tune, what F1 hides, prompt overfitting, what our agreement numbers do and do not license.
 - **Judge B — OIL/HSE engineer, twenty years in the field.** Whether the categories match
   reality, whether the plausible-variation test is how professionals actually think, contractor
   reporting culture, under-reporting, what happens to a worker whose report gets ranked low.
@@ -40,8 +40,9 @@ anything that implies the thresholds came from a paper.
 
 > Partly true, and it is why we did three things. The person who wrote the rubric and the person
 > who generated the reports had no contact until both finished. Two of us then labelled all 180
-> independently and reported our disagreement rate, so you can see the ceiling rather than trust
-> us. And a sixth of the set is real OSHA narratives nobody on this team wrote.
+> against that rubric and published the disagreement rate — the independent first round agreed 52%,
+> which is why we rewrote the severity gate instead of quietly re-labelling. And a sixth of the set
+> is real OSHA narratives nobody on this team wrote.
 
 **Do not say:** "the data is realistic" · anything defensive. Concede the premise first — it is a
 fair hit, and conceding it is what makes the rest credible.
@@ -108,11 +109,13 @@ find one for you.
 > discipline, not a guarantee — if you want the stronger version, the OSHA number is the honest
 > check, because we never tuned against it at all.
 
-**"What does your ceiling argument actually claim?"**
-> Two people applying the same written rubric agreed `[AGREEMENT]` percent of the time. Anything
-> above that is not measurable with our labels, so a system claiming 95% would be claiming to be
-> more consistent than the ground truth it was scored against. We quote our own ceiling because a
-> number above it should make you suspicious.
+**"What does your agreement number actually claim?"**
+> Less than we used to claim, and we would rather say so. Our first round was independent and agreed
+> 52%, kappa 0.083 — severity was the gate that split us, so we rewrote it from adjectives into
+> observable outcomes. The second round agreed 96%, but it was not run independently, so we do not
+> quote it as a ceiling: it is evidence the revision worked, not a bound on the system. Claiming a
+> ceiling needs a fresh independent pass on a subset, which is a couple of hours, and we would
+> rather report that number than one we cannot defend.
 
 **"Kappa versus raw agreement?"**
 > Kappa subtracts the agreement you would get from chance alone. At a 22% positive rate two people
@@ -232,9 +235,9 @@ find one for you.
 > already solved.
 
 **"Is this a product or a project?"**
-> Today it is a working prototype with a measured accuracy ceiling and a stated set of
-> limitations. What makes it deployable rather than a demo is that it sits downstream of the
-> reporting that already exists and changes nobody's workflow — it reorders a queue.
+> Today it is a working prototype with measured accuracy and a stated set of limitations. What
+> makes it deployable rather than a demo is that it sits downstream of the reporting that already
+> exists and changes nobody's workflow — it reorders a queue.
 
 **"Who is the user?"**
 > The safety officer doing the monthly triage, and the HSE manager deciding where to send an audit
@@ -244,9 +247,9 @@ find one for you.
 **"What is genuinely new here?"**
 > Four things, and none of them is using a language model. The two-field auditable judgement —
 > hazard and barrier status separately, so you can see which one drove the call. Evaluation
-> measured against a human agreement ceiling rather than against itself. Density aggregation by
-> site, activity and barrier, which is what the problem statement actually asked for. And a
-> degraded mode that is tested rather than promised.
+> measured against human labels made to a written rubric we revised when it failed, rather than
+> against itself. Density aggregation by site, activity and barrier, which is what the problem
+> statement actually asked for. And a degraded mode that is tested rather than promised.
 
 **"Your competitor VelocityEHS already ships a PSIF classifier."**
 > They do, and the problem statement cites them. We are not claiming to beat a commercial product

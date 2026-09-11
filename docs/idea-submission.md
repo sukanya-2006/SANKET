@@ -77,10 +77,15 @@ suggestion and commercial products already do it. Four things are ours:
    than collapsed into one risk score. This is what lets the system distinguish a real hazard where
    the barrier held — not a precursor — from an identical-sounding report where it did not, and it
    is what makes a disagreement legible instead of a matter of trust.
-2. **Evaluation measured against a human ceiling.** Two annotators labelled all 180 reports
-   independently against a written rubric, with no contact until both finished. We report the
-   agreement rate and Cohen's kappa as the ceiling on any claim the system can make. Quoting your
-   own ceiling is unusual and it is the honest way to present a classifier.
+2. **A rubric revised by measurement, not by argument.** Two annotators labelled all 180 reports
+   against a written, versioned rubric. Round one was independent and agreed 52.2% on precursor
+   status, Cohen's kappa 0.083 — severity was the gate that split us, disagreeing by three or four
+   points on 76 of the 180. So we rewrote that gate: the one-change rule stated first, the severity
+   bands rewritten from adjectives into observable outcomes. Round two agreed 96.1%, kappa 0.922,
+   but it was **not run independently, so we do not quote it as a ceiling** — it is evidence the
+   revision worked, not a bound on the system. Claiming a ceiling would take a fresh independent
+   pass, and we would rather report that number than one we cannot defend. 173 of the 180 reports
+   are agreed; 7 remain open.
 3. **Density aggregation by site, activity and barrier**, reported as a rate rather than a count.
    Raw counts penalise sites that report diligently, which is the opposite of the incentive a
    safety system should create. Groups below a minimum volume are shown but not ranked, so a site
@@ -105,13 +110,16 @@ there is no data collection programme to fund before it is useful.
 **Known limitations.** A site that under-reports cannot be ranked; rate-based ranking protects
 against uneven honest reporting, not against silence. The rubric's severity thresholds are our own
 calibration rather than a sourced standard, though they were reviewed by an EHS professional
-outside the team. And the ceiling is real: no deployment can be more consistent than the labels it
-was measured against.
+outside the team. And we do not currently quote a human agreement ceiling: the round that was run
+independently predates the rubric revision, and the round that scored 96.1% was not independent.
+A fresh independent re-label of a ~40-report subset would settle it in a couple of hours; until
+that runs, we claim no bound.
 
 **Risks and mitigations.** Model output drifting between versions — every prediction row stores its
 model version, and aggregates never mix versions. API unavailability — the local baseline answers
 and says so. Annotator disagreement — if agreement falls below 70% the rubric is revised and the
-affected reports re-labelled, because at that point the document is ambiguous, not the people.
+affected reports re-labelled, because at that point the document is ambiguous, not the people. That
+mitigation has already fired once, taking the rubric from v2.1 to v2.2.
 
 ## Impact and benefits
 
@@ -151,5 +159,6 @@ External:
 - [ ] Every `[PLACEHOLDER]` replaced with a real evaluated number, or the sentence cut
 - [ ] Data-honesty paragraph still present in Feasibility and not softened
 - [ ] No innovation claim outside the four listed above
+- [ ] No agreement number presented as a ceiling unless a fresh independent pass produced it
 - [ ] No reference added that we have not read
 - [ ] EHS reviewer's name recorded in rubric §9

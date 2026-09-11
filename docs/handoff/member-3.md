@@ -60,6 +60,10 @@ You and Member 1 label all 180 independently against rubric v2.1, **no discussio
 finish**. Batched: first 90 by day 4 so a broken gate surfaces while there is time to fix it,
 the rest by day 6. Member 6 tiebreaks.
 
+That instruction is right and it stays. Round one kept it. Round two — the re-label after the
+rubric revision — did not: it was worked through together rather than blind. Read **What the two
+rounds actually measured** below before you quote either number.
+
 `data/gold_labels.csv`:
 
 ```
@@ -89,6 +93,30 @@ what identify the culprit.
 **Below 70%:** the rubric is ambiguous, not the annotators. Member 1 revises only the offending
 gate, bumps the version, and you both re-label only the reports that turned on that gate.
 
+### What the two rounds actually measured
+
+**Round one was independent, and it failed: 52.2% on `is_sif_precursor`, kappa 0.083.** Severity
+was the gate that split us — 14.4% agreement, 3–4 points apart on 76 of the 180. That is
+`gate_split` doing exactly the job described above.
+
+It bought the revision it was supposed to buy. v2.1 → v2.2 targeted the failing gate and nothing
+else: the one-change rule was stated first, and the severity bands were rewritten from adjectives
+into observable outcomes.
+
+**Round two scored 96.1%, kappa 0.922 — but it was not run independently, so it is not a
+ceiling.** "No discussion until both finish" was the rule and round two did not keep it. A kappa
+computed after two annotators have reconciled measures how well they agree once they already
+agree; it says nothing about how hard the task is. It is evidence the revision worked, and
+nothing stronger. Wherever it appears, it appears labelled **not independent — not a ceiling**.
+
+The labels are still good: 173 agreed, 7 open (10, 20, 51, 60, 96, 139, 149). Adjudicated labels
+are perfectly sound gold for training and evaluation. What round two cost us is the
+agreement-ceiling claim, not the data.
+
+**To get a real ceiling:** re-label a fresh ~40-report subset independently, no contact between
+annotators, and report that kappa. A couple of hours. Do that rather than defend a number you
+cannot.
+
 ---
 
 ## 3. Loading it
@@ -116,8 +144,10 @@ One output table. **Two tables plus one line, never a single merged table:**
    would measure domain transfer, not model quality: an unfair fight we do not stage.
 3. **Severity MAE** on precursor cases against adjudicated human severity.
 
-Plus annotator agreement % and kappa, reported as **the ceiling**. Quoting your own ceiling is
-the most sophisticated thing a student team can say.
+Plus annotator agreement % and kappa for each round, each one labelled with whether it was run
+independently. Round two's 96.1% / kappa 0.922 carries **not independent — not a ceiling** or it
+does not go in the table at all. Saying which of your own numbers you cannot defend is the most
+sophisticated thing a student team can say.
 
 **F1 and PR-AUC, never accuracy.** At ~22% positives, "always say no" scores 78%.
 
@@ -129,7 +159,13 @@ costs a life, a false alarm costs twenty minutes.
 ## Your hostile questions
 
 - *"You wrote the reports and graded yourself."* — Intent labels are discarded. Two annotators
-  labelled independently against a written rubric neither of them could negotiate, and a sixth of
-  the set is real OSHA text nobody on the team wrote.
+  labelled against a written rubric neither of them could negotiate, the first round blind — it
+  agreed 52%, which is what forced the revision — and a sixth of the set is real OSHA text nobody
+  on the team wrote.
+- *"What is your inter-annotator agreement?"* — First round was independent: 52%, kappa 0.083,
+  and severity was the gate that split us, so we rewrote it. Second round agreed 96%, but it was
+  not run independently, so we do not quote it as a ceiling — it is evidence the revision worked,
+  not a bound on the system. A fresh independent pass would give us a real number, and we would
+  rather report that one.
 - *Why hold out a test set* — tuning against your test score fits the model to the answers rather
   than to the problem.

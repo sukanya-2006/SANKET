@@ -10,7 +10,7 @@ WHY FROM THE DATABASE
 
 The merged file (data/gold_labels.csv) has already had disagreements resolved,
 so agreement cannot be recovered from it. `gold_labels` keeps each annotator's
-raw row, which is the only place the ceiling is still measurable.
+raw row, which is the only place the two label sets can still be compared.
 
 WHAT IT REPORTS
 
@@ -23,14 +23,21 @@ WHAT IT REPORTS
 
 WHAT THIS NUMBER IS, AND WHAT IT IS NOT
 
-It is the ceiling. Two people applying the same rubric to the same reports
-disagree this often, so no classifier should be expected to beat it.
+It is not a ceiling and must not be quoted as one. A ceiling would need the two
+annotators to have judged these reports independently, and for the rows now in
+`gold_labels` they did not. Those rows are round two, and the team lead
+confirmed on 11 September that the annotators did not work separately the second
+time. Round two is evidence that the rubric revision helped. It bounds nothing.
 
-It is only meaningful if the two annotators judged these reports independently
-and did not reconcile before their files were saved. That is a fact about
-process, not about data - this script cannot verify it, and neither can any
-other. If the two files were ever edited to match after a discussion, the number
-below is not a ceiling and must not be quoted as one.
+Round one was independent and scored 52.2% raw, kappa 0.083, with severity the
+broken gate at 14.4% - a 3-vs-4 split on 76 of the 180 reports. That is what
+triggered the documented rubric revision, v2.1 -> v2.2, which rewrote the
+severity gate to state the one-change rule first and to describe the bands as
+observable outcomes rather than adjectives.
+
+For a number that can be quoted, run prepare_independent_recheck.py. It samples
+40 reports for a fresh independent re-label; the worksheets already exist at
+data/recheck_akanksha.csv and data/recheck_sukanya.csv.
 """
 
 import io
@@ -106,6 +113,7 @@ def main():
     print("  INTER-ANNOTATOR AGREEMENT — %s vs %s" % (A, B))
     print("=" * 78)
     print("\n  %d reports labelled by both.\n" % len(rows))
+    print("  Round two - not independent, not a ceiling. See the note at the end.\n")
 
     print("  HEADLINE")
     print("  " + "-" * 74)
@@ -165,8 +173,11 @@ def main():
                      B[:3], r["hazard_b"], r["control_b"], r["severity_b"]))
 
     print("\n  " + "-" * 74)
-    print("  This is a ceiling ONLY if neither annotator saw the other's file before")
-    print("  saving. No script can check that. If they reconciled first, do not quote it.")
+    print("  Round two - not independent, not a ceiling. The annotators did not work")
+    print("  separately the second time, so the figures above are evidence that the")
+    print("  v2.2 severity rewrite helped, not a bound on what a classifier can do.")
+    print("  Do not quote them as a ceiling. For a kappa that can be quoted, run")
+    print("  prepare_independent_recheck.py: 40 reports, fresh independent re-label.")
 
 
 if __name__ == "__main__":

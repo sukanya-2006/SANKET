@@ -72,7 +72,8 @@ Verified from a clean clone: 36 tests pass with no API key and no database.
 | **Database** | ⚠️ Schema written, constraints encode the rubric. **No live instance** — no `backend/.env` yet |
 | **Rubric** | ✅ v2.2 — severity anchors rewritten after round one failed its agreement check |
 | **Dataset** | ✅ 150 synthetic + 30 real OSHA reports, with metadata |
-| **Labelling** | ⚠️ Round 1 complete (akanksha + sukanya, 180 each). **It failed the agreement check** — see below |
+| **Labelling** | ⚠️ Round 1 complete (akanksha + sukanya, 180 each), run independently. **It failed the agreement check** — 52.2%, kappa 0.083 — which is what drove the rubric revision. See below |
+| **Round two** | ⚠️ Re-labelled against v2.2 — 96.1%, kappa 0.922, but **not run independently: evidence the revision worked, not a ceiling.** 173 agreed, 7 open (10, 20, 51, 60, 96, 139, 149) |
 | **Tests** | ✅ 36, all real, no skips, hermetic |
 | **Frontend** | 🔴 Not started — Member 5 |
 
@@ -110,12 +111,25 @@ Both annotators completed 180 reports. Agreement on the **derived** `is_sif_prec
 - **One annotator typed `is_sif_precursor` by hand**, contradicting their own gate answers on
   138 of 180 rows. That error alone inflated the headline from 0.083 to a flattering 0.309.
 
-A second round has reported raw 79.4% / kappa 0.595. **Whether that is a ceiling depends on how
-those files were produced** — an independent re-label against the revised rubric is quotable; an
-adjudicated pair is not, because its agreement is high by construction. Run:
+A second round, against the revised rubric, scored **96.1% / kappa 0.922** — and **it was not run
+independently.** The annotators worked differently the second time, by discussion or by one
+adjudicating into both files, so the two files were never sealed from each other. That number is
+evidence the v2.2 revision fixed the gate it was aimed at, and nothing stronger — **not a ceiling,
+not a bound, not a number to beat.** 173 reports are agreed and are perfectly good gold labels;
+7 stay open (10, 20, 51, 60, 96, 139, 149). What we lost is one claim about the labels, not the
+labels.
+
+**~~Was round two independent?~~** Answered, 11 September: **no.** No script can settle it —
+`check_independence.py` compares files, and independence is a fact about process, not about data.
+It was checked with the annotators instead.
+
+A quotable kappa is still about two hours of two people's time away: a fresh subset, re-labelled
+with no contact at all until both files are finished.
 
 ```bash
-python check_independence.py --a <A>.csv --b <B>.csv --baseline-a <A_orig>.csv --baseline-b <B_orig>.csv
+python prepare_independent_recheck.py   # 40 reports, stratified — worksheets already generated
+# data/recheck_akanksha.csv + data/recheck_sukanya.csv
+python check_independence.py --a data/recheck_akanksha.csv --b data/recheck_sukanya.csv
 ```
 
 ### For annotators
@@ -188,8 +202,9 @@ render.yaml               Member 6 — API deployment
 
 ## The three artifacts that matter most
 
-1. `eval/run_eval.py` — baseline F1, LLM F1, human agreement ceiling, OSHA-set LLM F1, severity
-   MAE. **Not built** (Member 3), and blocked behind labelling regardless.
+1. `eval/run_eval.py` — baseline F1, LLM F1, OSHA-set LLM F1, severity MAE, plus annotator
+   agreement per round, each one labelled with whether that round was run independently. **Not
+   built** (Member 3), and blocked behind labelling regardless.
 2. `backend/app/aggregate.py` — rate-based precursor density by site, activity, rule and barrier,
    plus trend and triage latency. **Built.**
 3. The live text box on the first screen, with the offline fallback behind it. **Backend built,
@@ -217,8 +232,12 @@ These are not decoration; they are what makes the numbers defensible.
 - **Our data is synthetic plus public OSHA.** We never imply we had Oil India data. Disclosed
   proactively, not confessed under questioning.
 - **Never quote accuracy.** At ~22% positives, "always say no" scores 78%. Report F1 and PR-AUC.
-- **Human agreement is the ceiling.** If two annotators agree 88% of the time, no classifier can
-  honestly claim 95%.
+- **Human agreement is the ceiling — but only an agreement measured independently.** If two
+  annotators agree 88% of the time, no classifier can honestly claim 95%. Our own round-two
+  number does not qualify: 96.1% / kappa 0.922 was not run independently, so it is evidence the
+  v2.2 revision worked and never a ceiling. Our independent number is round one's 52.2% / kappa
+  0.083, measured under the rubric we have since rewritten. Until the fresh independent pass is
+  run, we quote no ceiling at all.
 - **`median_triage_seconds` is currently computed from synthetic timestamps.** It must not appear
   on a slide as a measured result until real timings exist.
 - **The model never generates safety advice.** `recommended_check` is a static lookup table.

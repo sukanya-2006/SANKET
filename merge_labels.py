@@ -2,9 +2,17 @@
 merge_labels.py
 
 Run this once BOTH annotators have finished their independent labeling
-files. Compares them, computes raw agreement and Cohen's kappa (the
-"human ceiling" number your pitch depends on), and produces the final
-data/gold_labels.csv.
+files. Compares them, computes raw agreement and Cohen's kappa, and
+produces the final data/gold_labels.csv.
+
+The kappa this prints is only quotable as a human baseline if the two
+files really were labeled independently. Round one was, and scored
+52.2% agreement / kappa 0.083 - severity was the gate that split it.
+Round two scored 96.1% / kappa 0.922 but was NOT independent: it is
+evidence the v2.2 severity rewrite helped, not a ceiling and not a
+number for the classifier to be measured against. For a quotable
+independent kappa, run prepare_independent_recheck.py, which samples
+40 reports for a fresh independent re-label.
 
 is_sif_precursor is RE-DERIVED from the three gates before anything is
 compared, per rubric sections 2 and 6 - the CSVs carry it as a typed column and
@@ -117,7 +125,8 @@ def main():
     print("=" * 60)
     print(f"  Raw agreement:  {raw_agreement:.1%}")
     print(f"  Cohen's kappa:  {kappa:.3f}")
-    print("  (This is the ceiling your classifier gets measured against.)")
+    print("  (Quotable only if these two files were labeled independently.")
+    print("   Round two was not - see the module docstring. Not a ceiling.)")
 
     if raw_agreement < 0.70:
         print("\n  [!] Below 70% agreement. Per rubric v2.2 section 10: revise the "

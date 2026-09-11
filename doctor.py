@@ -194,7 +194,7 @@ def check_honesty():
             complete.append((path, rows))
 
     if len(complete) < 2:
-        print(f"{INFO}fewer than two complete annotator files — no ceiling to compute yet")
+        print(f"{INFO}fewer than two complete annotator files — no agreement number to compute yet")
         return
 
     # Was is_sif_precursor derived, or typed by feel?
@@ -219,8 +219,11 @@ def check_honesty():
         else:
             print(f"{OK}{path.name}: is_sif_precursor derived correctly")
 
-    print(f"{INFO}for the ceiling itself run:")
+    print(f"{INFO}for the agreement number itself run:")
     print(f"{INFO}  python check_independence.py --a <A>.csv --b <B>.csv")
+    print(f"{INFO}round two (96.1%, kappa 0.922) was not independent — it is evidence the")
+    print(f"{INFO}rubric revision helped, not a ceiling. For a quotable kappa run:")
+    print(f"{INFO}  python prepare_independent_recheck.py")
 
 
 # ---------------------------------------------------------------- tests
@@ -250,7 +253,10 @@ MEMBER_WORK = {
           "  own training data — see the leakage warning in eval/run_eval.py.",
           "Tune the prompt on the 30 dev reports only. Bump PROMPT_VERSION when you change it."],
     "3": ["Own evaluation: python eval/run_eval.py",
-          "Report F1 and PR-AUC, never accuracy. Quote the agreement ceiling first."],
+          "Report F1 and PR-AUC, never accuracy. Quote no agreement number yet — round two",
+          "  (96.1%, kappa 0.922) was not independent, so it is not a ceiling to report.",
+          "  python prepare_independent_recheck.py samples 40 reports for a fresh",
+          "  independent re-label; that kappa is the one worth quoting."],
     "4": ["Set SUPABASE_DB_URL in backend/.env, then python load_reports.py",
           "Then python batch_classify.py to populate predictions."],
     "5": ["The API runs with no database and no key — build against it now.",

@@ -190,12 +190,13 @@ request while reporting itself healthy. Corrected, along with the `PROMPT_VERSIO
 
 ## Agreement, computed from the database rather than a merged file
 
-`gold_labels` keeps each annotator's raw row, so the ceiling is measurable directly. Run
-`python agreement.py`.
+`gold_labels` keeps each annotator's raw row, so agreement is measurable directly, field by
+field. Run `python agreement.py`. These are **second-round** numbers, and the second round was
+**not run independently** — see below. They are not a ceiling.
 
 | | agreement | kappa |
 |---|---|---|
-| `is_sif_precursor` | 173/180 — 96.1% | **0.922** |
+| `is_sif_precursor` | 173/180 — 96.1% | 0.922 — not independent, not a ceiling |
 | Gate 1 `hazard_assessment` | 180/180 — 100% | 1.000 |
 | `lsr_rule` | 176/180 — 97.8% | 0.974 |
 | Gate 2 `control_status` | 162/164 — 98.8% | 0.978 |
@@ -213,12 +214,24 @@ generated centred on a hazard category, so both annotators said `yes` almost eve
 kappa of 1.000 here reflects the construction of the set, not the difficulty of the judgement.
 Say that before a judge asks.
 
-### This is a ceiling only if the labelling was independent
+### Resolved: the second round was not independent, so it is not a ceiling
 
-No script can check that, including `agreement.py`. If the two files were ever edited to match
-after a discussion, 0.922 is not a ceiling and must not be quoted as one. **This is still
-unconfirmed** and it is the one number in the pitch that depends on a fact about process rather
-than about data.
+No script can check independence, including `agreement.py` — it is a fact about process, not
+about data. It has now been checked with the annotators, and the answer is no: round two was
+not run independently. The two files were not sealed from each other. So 96.1% / kappa 0.922
+is not a ceiling and is not quoted as one anywhere in this document.
+
+**Round one was independent**, and it is the honest measurement of where we started:
+52.2% agreement on `is_sif_precursor`, kappa **0.083**. Severity was the gate that broke it —
+14.4% agreement, splitting by three or four points on 76 of the 180 reports. That result is
+what drove the rubric revision from v2.1 to v2.2, and the revision targeted the failing gate
+specifically: the one-change rule was stated first, and the severity bands were rewritten from
+adjectives into observable outcomes.
+
+Round two is what happened after that revision. It is evidence the revision worked, and
+nothing stronger — not a bound on the system, not a number to beat. A real ceiling needs a
+fresh independent pass: a ~40-report subset, re-labelled with no contact between annotators, a
+couple of hours' work. We would rather report that number than one we cannot defend.
 
 ---
 
@@ -278,12 +291,13 @@ Both are real; they measure different things.
 
 | what is compared | result |
 |---|---|
-| `is_sif_precursor` alone — the label the product predicts | 96.1%, kappa 0.922 |
+| `is_sif_precursor` alone — the label the product predicts | 96.1%, kappa 0.922 — round two, not independent |
 | all four fields matching exactly | 58.3% |
 | the three gates matching exactly, ignoring `lsr_rule` | 59.4% |
 
-The headline number is the one about the label we actually ship. Quote it as that, explicitly,
-and give the severity breakdown alongside — not as a bare 96%.
+The 96.1% is the one about the label we actually ship. Quote it as that, explicitly, carrying
+the not-independent caveat with it, and give the severity breakdown alongside — never as a bare
+96%, and never as a ceiling.
 
 ---
 
@@ -297,7 +311,7 @@ python -c "import sys; sys.path.insert(0,'backend'); from app import db; db.appl
 python load_reports.py         # 150 synthetic + 30 OSHA
 python load_gold_labels.py     # 534 human labels, prints every correction
 python batch_classify.py       # one Groq call per report, resumable
-python agreement.py            # the ceiling
+python agreement.py            # per-field agreement — not a ceiling, see above
 ```
 
 `batch_classify.py` paces at 25 seconds per report to stay inside the free tier's token

@@ -48,21 +48,29 @@ the stub it stayed that way. Both are fixed.
 
 ```
 Prototype Evaluation:
-● Human ceiling: 96.1% agreement, Cohen's kappa 0.922 (n=180, two annotators)
 ● LLM (prompt v4): F1 0.776 — held out, n=65
 ● TF-IDF baseline: F1 0.754 ± 0.077, PR-AUC 0.847 — 5-fold CV, n=114
 ● OSHA generalisation: F1 0.118 (n=30 — too small to conclude from)
+● Labels: 180 reports, two annotators, written rubric (v2.2). Round 1 independent:
+  52% agreement, kappa 0.083 — so we rewrote the severity gate. Round 2: 96%, but
+  not run independently — not a ceiling.
 ```
 
 ### Why this ordering is the strongest version
 
-Lead with the ceiling. *"Two of us labelled 180 reports independently and agreed 96% of the
-time"* is the answer to "you wrote the reports and graded yourself", and it is the one number
-no competitor will have.
+Lead with the comparison. **The LLM is now ahead of the baseline** — it was behind two days
+ago (0.719 against 0.784), and what changed was a prompt bug, not the model. That is a better
+story than a flat number, because it shows the evaluation was honest enough to catch our own
+mistake.
 
-Then the comparison. **The LLM is now ahead of the baseline** — it was behind two days ago
-(0.719 against 0.784), and what changed was a prompt bug, not the model. That is a better story
-than a flat number, because it shows the evaluation was honest enough to catch our own mistake.
+Then the labels, and say the whole arc. *"Our first labelling round was independent and agreed
+52% — kappa 0.083. Severity was the gate that split us, so we rewrote it. The second round
+agreed 96%, but it was not run independently, so we do not quote it as a ceiling — it is
+evidence the revision worked, not a bound on the system."* That is the answer to "you wrote the
+reports and graded yourself": not one number no competitor will have, but a rubric revision no
+competitor will have measured before and after, on the gate that was actually failing. To claim
+a ceiling we would need a fresh independent pass, and we would rather report that number than
+one we cannot defend.
 
 ### Three things to say before a judge asks
 
@@ -106,6 +114,10 @@ A team that can say which gate is failing and why has demonstrably measured its 
 **`median_triage_seconds`** from `/aggregate/summary`. The synthetic reports carry generated
 timestamps, so it measures the generator, not the system.
 
-**Cohen's kappa 0.922, as a ceiling** — until someone confirms the two annotators labelled
-independently and neither file was edited to match afterwards. No script can check that. Quote
-it as "our two annotators agreed 96% of the time" only once that is confirmed.
+**Cohen's kappa 0.922, as a ceiling.** Settled on 11 September: round two was not run
+independently — the annotators worked differently the second time, so 0.922 measures agreement
+reached with contact, not two independent judgements. The slide keeps the 96% only where it
+belongs — beside the round-one figure it improved on, marked *not independent* — and the kappa
+stays off the deck entirely. A fresh independent re-label of a ~40-report subset, no contact
+between annotators, is a couple of hours' work and gives a kappa we can quote without a caveat.
+Nothing short of that turns 0.922 into a ceiling.

@@ -104,7 +104,7 @@ anything else.
 |---|---|
 | **Why not accuracy** | About one in four reports is serious, so answering "no" to everything scores 78%. That number would look good and mean nothing. We report F1 and PR-AUC. |
 | **Precision vs recall** | Precision: of what we flagged, how much was real. Recall: of what was real, how much we caught. We chose recall deliberately — missing a fatal precursor costs a life, a false alarm costs twenty minutes. |
-| **What a ceiling means** | Two of us labelled independently and agreed `[AGREEMENT]` percent of the time. No system scored against those labels can honestly claim to be more consistent than they are. So we quote our ceiling rather than hide it. |
+| **Why we don't quote a ceiling** | Our first round was independent and agreed 52%, kappa 0.083 — severity was the gate that split us, so we rewrote it. The second round agreed 96% but was not run independently, so it is evidence the revision worked, not a bound on the system. A ceiling needs a fresh independent pass, and we would rather report that number than one we cannot defend. |
 | **Kappa vs raw agreement** | Kappa subtracts the agreement you would expect from chance alone. At a 22% positive rate, two people guessing still agree often, so raw agreement flatters us. |
 | **When it is wrong** | It never closes a report — it reorders the reading queue, so a low-ranked report is still read. Every judgement is logged with the gate and the phrases. A human overrules it. |
 | **Where the data came from** | 150 synthetic reports we wrote, plus 30 real public OSHA narratives. We never had Oil India data and we say so before being asked. |
@@ -144,8 +144,8 @@ anything else.
 **You own:** the dataset, the labelling, the evaluation.
 
 - *"You wrote the reports and graded yourself."* → Concede it first. Then: intent labels
-  discarded, two independent annotators against a written rubric, a sixth of the set real OSHA
-  text nobody here wrote.
+  discarded, two annotators against a written rubric we revised after measuring where it failed,
+  a sixth of the set real OSHA text nobody here wrote.
 - *Why hold out a test set* → Tuning against your test score fits the model to the answers, not
   the problem.
 - *Why 150 and not 90* → At 22% positives, 90 leaves about six positives in a held-out split and

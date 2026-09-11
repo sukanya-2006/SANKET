@@ -2,13 +2,13 @@
 
 **Owner:** Member 1. Structure is locked; do not reorder.
 
-**Placeholders are placeholders.** `[AGREEMENT]`, `[KAPPA]`, `[F1_BASE]`, `[F1_LLM]`,
-`[F1_OSHA]`, `[SEVERITY_MAE]` do not exist until the evaluation runs. If you find yourself about
-to say a specific number before day 13, stop — it is invented.
+**Placeholders are placeholders.** `[F1_BASE]`, `[F1_LLM]`, `[F1_OSHA]`, `[SEVERITY_MAE]` do not
+exist until the evaluation runs. If you find yourself about to say a specific number before day
+13, stop — it is invented. The labelling numbers are measured; those you can say.
 
-**Never say:** "it's a black box" · "our accuracy is X%" · "it's 100% accurate" · "AI-powered" as
-a substitute for saying what it does · anything claiming we *prevent* fatalities. We surface
-warnings. Humans act.
+**Never say:** "it's a black box" · "our accuracy is X%" · "it's 100% accurate" · "that's our
+ceiling" · "AI-powered" as a substitute for saying what it does · anything claiming we *prevent*
+fatalities. We surface warnings. Humans act.
 
 Timings assume 140 words per minute plus pauses for the live section.
 
@@ -111,13 +111,17 @@ Six seconds of slack. That is intentional — you will lose more than that to th
 
 ## 3:30–4:15 · Numbers, and one we get wrong
 
-> Two of us labelled all one hundred and eighty reports independently, against a written rubric,
-> without discussing a single one. We agreed `[AGREEMENT]` percent of the time. Cohen's kappa,
-> `[KAPPA]`.
+> Two of us labelled one hundred and eighty reports against a written rubric. Round one was
+> independent — fifty-two percent, kappa zero point zero eight three.
 >
-> That is our ceiling. No system here can honestly claim to beat two humans reading the same
-> document.
->
+> Severity split us, so we rewrote it. Round two agreed ninety-six, but not independently —
+> evidence the rewrite worked, not a ceiling.
+
+*Round two was not independent, so it is not a ceiling — 96.1% and kappa 0.922 are evidence the
+rubric revision worked, nothing stronger. If a judge asks for a ceiling: we do not have one yet.
+The fix is a fresh independent pass over a forty-report subset, and we would rather quote that
+number than one we cannot defend.*
+
 > Keyword baseline, F1 `[F1_BASE]`. The language model, `[F1_LLM]`. On thirty real OSHA reports
 > nobody on our team wrote, `[F1_OSHA]`.
 >

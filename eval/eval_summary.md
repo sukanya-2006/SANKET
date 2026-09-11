@@ -9,18 +9,20 @@ Reproduce with:
 ```bash
 python eval/run_eval.py --no-llm          # baseline, 5-fold cross-validated
 python score_stored_predictions.py        # LLM, scored from what is already in Supabase
-python agreement.py                       # the human ceiling
+python agreement.py                       # round two agreement, not independent
 ```
 
 ---
 
-## The three numbers to quote
+## The two numbers to quote
 
 | | F1 | how it was measured | n |
 |---|---|---|---|
-| **Human ceiling** | 96.1% agreement, **kappa 0.922** | two annotators, independently | 180 |
 | **LLM, prompt v4** | **0.776** | held out; the model never saw the labels | 65 |
 | **TF-IDF baseline** | **0.754** ± 0.077 | 5-fold cross-validated, refit inside each fold | 114 |
+
+Neither is bounded by an annotator-agreement figure. See the labelling section below for what
+the agreement numbers do and do not say.
 
 PR-AUC for the baseline is 0.847 ± 0.032.
 
@@ -34,6 +36,29 @@ decisive. The baseline is cross-validated over 114 reports; the LLM is scored on
 have both a gold label and a stored prediction under that prompt version. Putting both on one
 pool needs a full re-run, which is a token-budget problem rather than a hard one — see the
 rate-limit note at the bottom.
+
+---
+
+## Where the labels came from, and what the agreement numbers mean
+
+Round one was independent: two annotators labelled 180 reports separately and agreed on
+**52.2%**, Cohen's kappa **0.083**. Severity was the broken gate — 14.4% agreement, splitting
+3–4 points on 76 of the 180.
+
+That triggered a documented rubric revision, **v2.1 → v2.2**, rewriting the severity gate: the
+one-change rule is stated first, and the bands were changed from adjectives to observable
+outcomes.
+
+Round two scored 96.1% agreement, kappa 0.922 — **round two, not independent, not a ceiling**.
+The annotators did not work separately the second time, so those numbers are evidence that the
+revision helped. They are not a bound on the model, and must never be quoted as a ceiling or as
+a number to beat.
+
+The gold set stands at 173 agreed reports, with 7 still open (10, 20, 51, 60, 96, 139, 149).
+
+A quotable kappa needs a fresh independent pass. `prepare_independent_recheck.py` samples 40
+reports for exactly that, and the worksheets are already written to `data/recheck_akanksha.csv`
+and `data/recheck_sukanya.csv`.
 
 ---
 

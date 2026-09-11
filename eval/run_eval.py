@@ -37,10 +37,14 @@ Two tables and one line. Never a single merged table.
            Being wrong by one level and by three are different mistakes; a
            classification metric would treat them identically.
 
-  Ceiling  Annotator agreement % and Cohen's kappa.
-           Quoted first, deliberately. If two humans applying the same written
-           rubric agree 88% of the time, nothing scored against those labels
-           can honestly claim 95%.
+  Round 2  Annotator agreement % and Cohen's kappa — not a ceiling.
+           Round two was NOT run independently — the annotators worked
+           differently the second time. It is evidence that the v2.1 -> v2.2
+           rubric revision helped; it is not a ceiling, and not a bound on
+           anything scored against these labels. The independent number is
+           round one: 52.2% agreement, Cohen's kappa 0.083.
+           prepare_independent_recheck.py samples 40 reports for a fresh
+           independent re-label, which would yield a quotable kappa.
 
 ACCURACY IS NEVER REPORTED. At ~22% positives, "always say no" scores 78%.
 This script will refuse to compute it.
@@ -204,8 +208,13 @@ def severity_mae(pairs):
     return sum(abs(a - b) for a, b in pairs) / len(pairs)
 
 
-def agreement_ceiling(path_a, path_b):
-    """Raw agreement and Cohen's kappa on is_sif_precursor. This is the ceiling."""
+def annotator_agreement(path_a, path_b):
+    """Raw agreement and Cohen's kappa on is_sif_precursor.
+
+    Round two — not independent, not a ceiling. The annotators worked differently the
+    second time, so this measures whether the v2.2 severity gate is followable, not how
+    consistent two independent humans are. Nothing here bounds a model's score.
+    """
     from sklearn.metrics import cohen_kappa_score
 
     a = {r["report_id"]: r for r in read_csv(path_a)}
@@ -389,7 +398,7 @@ def main():
     parser.add_argument("--folds", type=int, default=5,
                         help="cross-validation folds over the scoring pool (default 5)")
     parser.add_argument("--annotators", nargs=2, metavar=("A", "B"),
-                        help="the two annotator CSVs, for the agreement ceiling")
+                        help="the two annotator CSVs, for the round-two agreement check")
     args = parser.parse_args()
 
     print("=" * 72)
@@ -407,20 +416,22 @@ def main():
         flag = "" if 0.20 <= rate <= 0.25 else "   [!] outside the plan's 20-25% band"
         print(f"  Positive class (synthetic): {positives}/{len(synthetic)} = {rate:.1%}{flag}")
 
-    # --- the ceiling, first ---
+    # --- annotator agreement, first ---
     if args.annotators:
-        ceiling = agreement_ceiling(*args.annotators)
-        if ceiling:
-            print("\n  THE CEILING — two annotators, independent, same written rubric")
+        agreement = annotator_agreement(*args.annotators)
+        if agreement:
+            print("\n  ANNOTATOR AGREEMENT — round two: not independent, not a ceiling")
             print("  " + "-" * 70)
-            print(f"  Raw agreement   {ceiling['raw']:.1%}   on {ceiling['n']} reports")
-            print(f"  Cohen's kappa   {ceiling['kappa']:.3f}")
-            print("  Nothing scored against these labels can honestly claim to be more")
-            print("  consistent than the humans who made them.")
+            print(f"  Raw agreement   {agreement['raw']:.1%}   on {agreement['n']} reports")
+            print(f"  Cohen's kappa   {agreement['kappa']:.3f}")
+            print("  Round two was not run independently — the annotators worked")
+            print("  differently the second time. Read this as evidence the v2.2 rubric")
+            print("  revision helped, not as a bound on anything scored against these")
+            print("  labels. The independent round one agreed 52.2%, kappa 0.083.")
             print("\n  Per-field agreement (which gate splits):")
-            for col, val in ceiling["per_gate"].items():
+            for col, val in agreement["per_gate"].items():
                 print(f"    {col:<22} {val:.1%}")
-            if ceiling["raw"] < 0.70:
+            if agreement["raw"] < 0.70:
                 print("\n  [!] Below 70%. Rubric section 10: revise the splitting gate and")
                 print("      re-label only the reports that turned on it.")
 
@@ -482,7 +493,8 @@ def main():
 
     print("\n" + "=" * 72)
     print("  Accuracy is deliberately absent. At ~22% positives, answering 'no' to")
-    print("  everything scores 78%. Report F1 and PR-AUC, and quote the ceiling.")
+    print("  everything scores 78%. Report F1 and PR-AUC. There is no human ceiling")
+    print("  to quote: the only independent round agreed 52.2%, kappa 0.083.")
     print("=" * 72 + "\n")
 
 
