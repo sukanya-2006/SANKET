@@ -1,22 +1,33 @@
-# """API surface — TECH_STACK v2. Paths and field names per NAMES.md.
+# """API surface — SANKET.
 
-# Routes are thin on purpose. Classification goes through `classifier.classify`, which owns the
-# cache, the timeout, the retry and the fallback; reads go through `repository`, which owns the
-# choice between Postgres and the seeded stub. Swapping either out does not touch this file.
+# Routes are intentionally thin:
+
+# - Classification goes through classifier.classify()
+# - Database reads go through repository
+# - Worker reports are classified and then saved to Postgres
+# - Predictions are stored separately from reports
 # """
 
+# from __future__ import annotations
+
 # import logging
-# from datetime import datetime, timezone
+# import traceback
+# import uuid
+# from datetime import date, datetime, timezone
+# from typing import Literal
 
 # from fastapi import APIRouter, HTTPException, Query
+# from pydantic import BaseModel, Field
 
 # from .. import aggregate, classifier, db, repository
+# from ..api.recommendations import recommended_check_for
 # from ..config import get_settings
 # from ..schemas import (
 #     ActivityAggregateResponse,
 #     AggregateSummary,
 #     AnalyzeRequest,
 #     AnalyzeResponse,
+#     ClassificationResult,
 #     ControlStatus,
 #     HazardAssessment,
 #     LSRRule,
@@ -25,150 +36,846 @@
 #     RuleControlBucket,
 #     ShiftAggregate,
 #     SiteAggregateResponse,
+#     StatusUpdateRequest,
 #     TrendPoint,
 # )
 
+
 # log = logging.getLogger(__name__)
+
 # router = APIRouter()
 
 
-# @router.get("/meta", tags=["meta"], summary="Enums, versions and live model metrics")
+# # ============================================================================
+# # WORKER REPORT SCHEMA
+# # ============================================================================
+
+# class WorkerReportRequest(BaseModel):
+#     report_text: str = Field(min_length=1, max_length=20_000)
+
+#     site: str = Field(min_length=1)
+#     activity: str = Field(min_length=1)
+
+#     shift: Literal["day", "night"] = "day"
+
+#     is_contractor: bool = False
+
+
+# # ============================================================================
+# # META
+# # ============================================================================
+
+# @router.get(
+#     "/meta",
+#     tags=["meta"],
+#     summary="Enums, versions and live model metrics",
+# )
 # def meta() -> dict:
+
 #     settings = get_settings()
+
 #     return {
-#         "hazard_assessment": [e.value for e in HazardAssessment],
-#         "control_status": [e.value for e in ControlStatus],
-#         "lsr_rule": [e.value for e in LSRRule],
+#         "hazard_assessment": [
+#             e.value for e in HazardAssessment
+#         ],
+
+#         "control_status": [
+#             e.value for e in ControlStatus
+#         ],
+
+#         "lsr_rule": [
+#             e.value for e in LSRRule
+#         ],
+
 #         "sites": repository.sites(),
+
 #         "activities": repository.activities(),
+
 #         "rubric_version": settings.rubric_version,
+
 #         "prompt_version": settings.prompt_version,
+
 #         "min_group_n": aggregate.MIN_GROUP_N,
-#         "database": "connected" if db.is_live() else "not_configured",
-#         # Schema-failure and fallback rates as measured numbers, not hopes.
+
+#         "database": (
+#             "connected"
+#             if db.is_live()
+#             else "not_configured"
+#         ),
+
 #         "metrics": classifier.metrics(),
 #     }
 
 
-# # ---------------------------------------------------------------------------
-# # Screen 1 — live analyse box
-# # ---------------------------------------------------------------------------
+# # ============================================================================
+# # SCREEN 1 — ANALYZE REPORT
+# # ============================================================================
 
-
-# @router.post("/analyze", response_model=AnalyzeResponse, tags=["analyze"])
+# @router.post(
+#     "/analyze",
+#     response_model=AnalyzeResponse,
+#     tags=["analyze"],
+# )
 # def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
-#     """Classify one free-text report.
 
-#     `is_fallback` is true when the primary classifier failed, timed out, or returned output the
-#     schema rejected twice, and the local baseline answered instead. The UI must show that plainly
-#     as "degraded mode — keyword baseline" rather than quietly serving a weaker answer.
-#     """
 #     try:
-#         outcome = classifier.classify(payload.report_text)
+
+#         outcome = classifier.classify(
+#             payload.report_text
+#         )
+
 #     except classifier.ClassificationUnavailable as exc:
-#         # Both classifiers are down. Say so; never invent a label.
-#         raise HTTPException(status_code=503, detail=f"classification unavailable: {exc}") from exc
+
+#         raise HTTPException(
+#             status_code=503,
+#             detail=f"classification unavailable: {exc}",
+#         ) from exc
+
+
+#     # Add the STATIC recommended check.
+#     #
+#     # The model does NOT generate this.
+#     # It comes from recommendations.py.
+
+#     result = outcome.result.model_copy(
+#         update={
+#             "recommended_check": recommended_check_for(
+#                 outcome.result.lsr_rule,
+#                 outcome.result.is_sif_precursor,
+#             )
+#         }
+#     )
+
 
 #     return AnalyzeResponse(
-#         result=outcome.result,
+
+#         result=result,
+
 #         model_version=outcome.model_version,
+
 #         is_fallback=outcome.is_fallback,
+
 #         latency_ms=outcome.latency_ms,
+
 #         created_at=datetime.now(timezone.utc),
 #     )
 
 
-# # ---------------------------------------------------------------------------
-# # Screen 2 — ranked report queue
-# # ---------------------------------------------------------------------------
+# # ============================================================================
+# # WORKER REPORT
+# #
+# # This endpoint:
+# #
+# # 1. Receives the report from the field worker
+# # 2. Classifies the report
+# # 3. Creates a report_id
+# # 4. Saves the report to Postgres
+# # 5. Saves the classification to predictions
+# # 6. Returns the result to the frontend
+# # ============================================================================
+
+# @router.post(
+#     "/reports/worker",
+#     response_model=AnalyzeResponse,
+#     tags=["reports"],
+#     summary="Submit Worker Report",
+# )
+# def submit_worker_report(
+#     payload: WorkerReportRequest,
+# ) -> AnalyzeResponse:
 
 
-# @router.get("/reports", response_model=ReportPage, tags=["reports"])
-# def reports(
-#     limit: int = Query(20, ge=1, le=100),
-#     offset: int = Query(0, ge=0),
-#     is_sif_precursor: bool | None = None,
-#     lsr_rule: LSRRule | None = None,
-#     site: str | None = None,
-#     source: str | None = None,
-#     q: str | None = None,
-# ) -> ReportPage:
-#     """Precursors first, then severity descending. The ranked order is the product."""
-#     items, total = repository.list_reports(
-#         limit=limit,
-#         offset=offset,
-#         is_sif_precursor=is_sif_precursor,
-#         lsr_rule=lsr_rule.value if lsr_rule else None,
-#         site=site,
-#         source=source,
-#         q=q,
+#     # ------------------------------------------------------------------------
+#     # STEP 1 — Make sure database is configured
+#     # ------------------------------------------------------------------------
+
+#     if not db.is_live():
+
+#         raise HTTPException(
+#             status_code=503,
+
+#             detail=(
+#                 "Database is not configured. "
+#                 "Worker reports cannot be saved until "
+#                 "SUPABASE_DB_URL is configured."
+#             ),
+#         )
+
+
+#     # ------------------------------------------------------------------------
+#     # STEP 2 — CLASSIFY
+#     # ------------------------------------------------------------------------
+
+#     try:
+
+#         outcome = classifier.classify(
+#             payload.report_text
+#         )
+
+
+#     except classifier.ClassificationUnavailable as exc:
+
+#         raise HTTPException(
+#             status_code=503,
+
+#             detail=(
+#                 f"classification unavailable: {exc}"
+#             ),
+#         ) from exc
+
+
+#     # ------------------------------------------------------------------------
+#     # STEP 3 — STATIC RECOMMENDED CHECK
+#     # ------------------------------------------------------------------------
+
+#     result = outcome.result.model_copy(
+
+#         update={
+
+#             "recommended_check": recommended_check_for(
+
+#                 outcome.result.lsr_rule,
+
+#                 outcome.result.is_sif_precursor,
+
+#             )
+
+#         }
+
 #     )
-#     return ReportPage(items=items, total=total, limit=limit, offset=offset)
 
 
-# @router.get("/reports/{report_id}", response_model=ReportDetail, tags=["reports"])
-# def report_detail(report_id: str) -> ReportDetail:
-#     found = repository.get_report(report_id)
+#     # ------------------------------------------------------------------------
+#     # STEP 4 — CREATE UNIQUE REPORT ID
+#     # ------------------------------------------------------------------------
+
+#     report_id = (
+#         f"worker-{uuid.uuid4()}"
+#     )
+
+
+#     # ------------------------------------------------------------------------
+#     # STEP 5 — SAVE REPORT + PREDICTION
+#     # ------------------------------------------------------------------------
+
+#     try:
+
+
+#         # ================================================================
+#         # SAVE THE ORIGINAL WORKER REPORT
+#         #
+#         # IMPORTANT:
+#         #
+#         # The existing database schema only allows:
+#         #
+#         # source = 'synthetic'
+#         # source = 'osha'
+#         #
+#         # Therefore we store worker reports as 'synthetic'.
+#         #
+#         # This ensures the existing database CHECK constraint does not
+#         # reject the worker report.
+#         # ================================================================
+
+
+
+
+#         # Ensure the submitted site exists in `sites` BEFORE inserting the report -
+# # reports.site is a foreign key, and a worker can type any site name.
+# # Auto-registering it here means a real-world site name never causes a
+# # 500; it just becomes a new group in the dashboard.
+
+
+#         insert_report_sql = """
+
+#         INSERT INTO reports (
+
+#             report_id,
+
+#             report_text,
+
+#             source,
+
+#             site,
+
+#             activity,
+
+#             shift,
+
+#             report_date,
+
+#             is_contractor
+
+#         )
+
+#         VALUES (
+
+#             %(report_id)s,
+
+#             %(report_text)s,
+
+#             %(source)s,
+
+#             %(site)s,
+
+#             %(activity)s,
+
+#             %(shift)s,
+
+#             %(report_date)s,
+
+#             %(is_contractor)s
+
+#         )
+
+#         """
+        
+#         db.execute(
+
+#             insert_report_sql,
+
+#             {
+
+#                 "report_id":
+#                     report_id,
+
+#                 "report_text":
+#                     payload.report_text,
+
+#                 "source":
+#                     "synthetic",
+
+#                 "site":
+#                     payload.site,
+
+#                 "activity":
+#                     payload.activity,
+
+#                 "shift":
+#                     payload.shift,
+
+#                 "report_date":
+#                     date.today(),
+
+#                 "is_contractor":
+#                     payload.is_contractor,
+
+#             },
+
+#         )
+
+
+#         # ================================================================
+#         # SAVE CLASSIFICATION
+#         #
+#         # db.insert_prediction already exists in your db.py
+#         # ================================================================
+
+#         db.insert_prediction(
+
+#             report_id=report_id,
+
+#             result=result,
+
+#             model_version=outcome.model_version,
+
+#             is_fallback=outcome.is_fallback,
+
+#         )
+
+
+#         # ================================================================
+#         # CREATE INITIAL STATUS
+#         # ================================================================
+
+#         db.execute(
+
+#             """
+
+#             INSERT INTO report_status (
+
+#                 report_id,
+
+#                 status
+
+#             )
+
+#             VALUES (
+
+#                 %(report_id)s,
+
+#                 'active'
+
+#             )
+
+#             ON CONFLICT (report_id)
+
+#             DO NOTHING
+
+#             """,
+
+#             {
+
+#                 "report_id":
+#                     report_id
+
+#             },
+
+#         )
+
+
+#         log.info(
+
+#             "Worker report saved successfully: %s",
+
+#             report_id,
+
+#         )
+
+
+#     # ------------------------------------------------------------------------
+#     # IF DATABASE SAVE FAILS
+#     #
+#     # DO NOT HIDE THE REAL ERROR.
+#     #
+#     # This was the major debugging problem before.
+#     # ------------------------------------------------------------------------
+
+#     except Exception as exc:
+
+
+#         traceback.print_exc()
+
+
+#         log.exception(
+
+#             "FAILED TO SAVE WORKER REPORT %s",
+
+#             report_id,
+
+#         )
+
+
+#         raise HTTPException(
+
+#             status_code=500,
+
+#             detail=(
+
+#                 f"Failed to save worker report: "
+
+#                 f"{type(exc).__name__}: {exc}"
+
+#             ),
+
+#         ) from exc
+
+
+#     # ------------------------------------------------------------------------
+#     # STEP 6 — RETURN RESULT TO FRONTEND
+#     # ------------------------------------------------------------------------
+
+#     return AnalyzeResponse(
+
+#         result=result,
+
+#         model_version=outcome.model_version,
+
+#         is_fallback=outcome.is_fallback,
+
+#         latency_ms=outcome.latency_ms,
+
+#         created_at=datetime.now(timezone.utc),
+
+#     )
+
+
+# # ============================================================================
+# # ADMIN TRIAGE — GET REPORTS
+# # ============================================================================
+
+# @router.get( 
+#     "/reports",
+#     response_model=ReportPage,
+#     tags=["reports"],
+# )
+# def reports(
+
+#     limit: int = Query(
+#         20,
+#         ge=1,
+#         le=100,
+#     ),
+
+#     offset: int = Query(
+#         0,
+#         ge=0,
+#     ),
+
+#     is_sif_precursor: bool | None = None,
+
+#     lsr_rule: LSRRule | None = None,
+
+#     site: str | None = None,
+
+#     source: str | None = None,
+
+#     q: str | None = None,
+
+# ) -> ReportPage:
+
+
+#     items, total = repository.list_reports(
+
+#         limit=limit,
+
+#         offset=offset,
+
+#         is_sif_precursor=is_sif_precursor,
+
+#         lsr_rule=(
+#             lsr_rule.value
+#             if lsr_rule
+#             else None
+#         ),
+
+#         site=site,
+
+#         source=source,
+
+#         q=q,
+
+#     )
+
+
+#     return ReportPage(
+
+#         items=items,
+
+#         total=total,
+
+#         limit=limit,
+
+#         offset=offset,
+
+#     )
+
+
+# # ============================================================================
+# # GET ONE REPORT
+# # ============================================================================
+
+# @router.get(
+#     "/reports/{report_id}",
+#     response_model=ReportDetail,
+#     tags=["reports"],
+# )
+# def report_detail(
+#     report_id: str,
+# ) -> ReportDetail:
+
+
+#     found = repository.get_report(
+#         report_id
+#     )
+
+
 #     if found is None:
-#         raise HTTPException(status_code=404, detail=f"report {report_id} not found")
+
+#         raise HTTPException(
+
+#             status_code=404,
+
+#             detail=(
+#                 f"report {report_id} not found"
+#             ),
+
+#         )
+
+
 #     return found
 
 
-# # ---------------------------------------------------------------------------
-# # Screen 3 — density dashboard
-# # ---------------------------------------------------------------------------
+# # ============================================================================
+# # UPDATE REPORT STATUS
+# #
+# # active → dispatched → archived
+# # ============================================================================
+
+# @router.patch(
+#     "/reports/{report_id}/status",
+#     tags=["reports"],
+# )
+# def update_report_status(
+
+#     report_id: str,
+
+#     payload: StatusUpdateRequest,
+
+# ) -> dict:
 
 
-# @router.get("/aggregate/summary", response_model=AggregateSummary, tags=["aggregate"])
+#     if not db.is_live():
+
+#         raise HTTPException(
+
+#             status_code=503,
+
+#             detail=(
+#                 "Database is not configured."
+#             ),
+
+#         )
+
+
+#     try:
+
+
+#         # First check whether the report exists.
+
+#         rows = db.query(
+
+#             """
+
+#             SELECT report_id
+
+#             FROM reports
+
+#             WHERE report_id = %(report_id)s
+
+#             """,
+
+#             {
+
+#                 "report_id":
+#                     report_id
+
+#             },
+
+#         )
+
+
+#         if not rows:
+
+#             raise HTTPException(
+
+#                 status_code=404,
+
+#                 detail=(
+#                     f"report {report_id} not found"
+#                 ),
+
+#             )
+
+
+#         # Insert status if it doesn't exist.
+#         # Otherwise update it.
+
+#         db.execute(
+
+#             """
+
+#             INSERT INTO report_status (
+
+#                 report_id,
+
+#                 status,
+
+#                 updated_at
+
+#             )
+
+#             VALUES (
+
+#                 %(report_id)s,
+
+#                 %(status)s,
+
+#                 NOW()
+
+#             )
+
+#             ON CONFLICT (report_id)
+
+#             DO UPDATE SET
+
+#                 status = EXCLUDED.status,
+
+#                 updated_at = NOW()
+
+#             """,
+
+#             {
+
+#                 "report_id":
+#                     report_id,
+
+#                 "status":
+#                     payload.status,
+
+#             },
+
+#         )
+
+
+#         return {
+
+#             "report_id":
+#                 report_id,
+
+#             "status":
+#                 payload.status,
+
+#             "message":
+#                 "Report status updated successfully.",
+
+#         }
+
+
+#     except HTTPException:
+
+#         raise
+
+
+#     except Exception as exc:
+
+
+#         traceback.print_exc()
+
+
+#         log.exception(
+
+#             "FAILED TO UPDATE REPORT STATUS %s",
+
+#             report_id,
+
+#         )
+
+
+#         raise HTTPException(
+
+#             status_code=500,
+
+#             detail=(
+
+#                 f"Failed to update report status: "
+
+#                 f"{type(exc).__name__}: {exc}"
+
+#             ),
+
+#         ) from exc
+
+
+# # ============================================================================
+# # DASHBOARD — SUMMARY
+# # ============================================================================
+
+# @router.get(
+#     "/aggregate/summary",
+#     response_model=AggregateSummary,
+#     tags=["aggregate"],
+# )
 # def aggregate_summary() -> AggregateSummary:
+
 #     return aggregate.summary()
 
 
-# @router.get("/aggregate/sites", response_model=SiteAggregateResponse, tags=["aggregate"])
-# def aggregate_sites() -> SiteAggregateResponse:
-#     """Ranked by precursor_rate DESC then precursor_count DESC.
+# # ============================================================================
+# # DASHBOARD — SITES
+# # ============================================================================
 
-#     Sites under MIN_GROUP_N reports are in `insufficient_volume` — grey them out, do not hide
-#     them. Rate, not raw count, so a site is not punished for reporting diligently.
-#     """
+# @router.get(
+#     "/aggregate/sites",
+#     response_model=SiteAggregateResponse,
+#     tags=["aggregate"],
+# )
+# def aggregate_sites() -> SiteAggregateResponse:
+
 #     return aggregate.sites()
 
 
-# @router.get("/aggregate/activities", response_model=ActivityAggregateResponse, tags=["aggregate"])
+# # ============================================================================
+# # DASHBOARD — ACTIVITIES
+# # ============================================================================
+
+# @router.get(
+#     "/aggregate/activities",
+#     response_model=ActivityAggregateResponse,
+#     tags=["aggregate"],
+# )
 # def aggregate_activities() -> ActivityAggregateResponse:
+
 #     return aggregate.activities()
 
 
-# @router.get("/aggregate/rules", response_model=list[RuleControlBucket], tags=["aggregate"])
+# # ============================================================================
+# # DASHBOARD — RULES
+# # ============================================================================
+
+# @router.get(
+#     "/aggregate/rules",
+#     response_model=list[RuleControlBucket],
+#     tags=["aggregate"],
+# )
 # def aggregate_rules() -> list[RuleControlBucket]:
+
 #     return aggregate.rules()
 
 
-# @router.get("/aggregate/shifts", response_model=list[ShiftAggregate], tags=["aggregate"])
+# # ============================================================================
+# # DASHBOARD — SHIFTS
+# # ============================================================================
+
+# @router.get(
+#     "/aggregate/shifts",
+#     response_model=list[ShiftAggregate],
+#     tags=["aggregate"],
+# )
 # def aggregate_shifts() -> list[ShiftAggregate]:
+
 #     return aggregate.shifts()
 
 
-# @router.get("/aggregate/trend", response_model=list[TrendPoint], tags=["aggregate"])
+# # ============================================================================
+# # DASHBOARD — TREND
+# # ============================================================================
+
+# @router.get(
+#     "/aggregate/trend",
+#     response_model=list[TrendPoint],
+#     tags=["aggregate"],
+# )
 # def aggregate_trend() -> list[TrendPoint]:
+
 #     return aggregate.trend()
 
 
 
 
-"""API surface — TECH_STACK v2. Paths and field names per NAMES.md.
+"""API surface — SANKET.
 
-Routes are thin on purpose. Classification goes through `classifier.classify`, which owns the
-cache, the timeout, the retry and the fallback; reads go through `repository`, which owns the
-choice between Postgres and the seeded stub. Swapping either out does not touch this file.
+Routes are intentionally thin:
+
+- Classification goes through classifier.classify()
+- Database reads go through repository
+- Worker reports are classified and then saved to Postgres
+- Predictions are stored separately from reports
 """
 
+from __future__ import annotations
+
 import logging
-from datetime import datetime, timezone
+import traceback
+import uuid
+from datetime import date, datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from .. import aggregate, classifier, db, repository
+from ..api.recommendations import recommended_check_for
 from ..config import get_settings
 from ..schemas import (
     ActivityAggregateResponse,
@@ -187,49 +894,94 @@ from ..schemas import (
     TrendPoint,
 )
 
+
 log = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
-@router.get("/meta", tags=["meta"], summary="Enums, versions and live model metrics")
+# ============================================================================
+# WORKER REPORT SCHEMA
+# ============================================================================
+
+class WorkerReportRequest(BaseModel):
+    report_text: str = Field(min_length=1, max_length=20_000)
+    site: str = Field(min_length=1)
+    activity: str = Field(min_length=1)
+    shift: Literal["day", "night"] = "day"
+    is_contractor: bool = False
+
+
+# ============================================================================
+# META
+# ============================================================================
+
+@router.get(
+    "/meta",
+    tags=["meta"],
+    summary="Enums, versions and live model metrics",
+)
 def meta() -> dict:
+
     settings = get_settings()
+
     return {
-        "hazard_assessment": [e.value for e in HazardAssessment],
-        "control_status": [e.value for e in ControlStatus],
-        "lsr_rule": [e.value for e in LSRRule],
+        "hazard_assessment": [
+            e.value for e in HazardAssessment
+        ],
+        "control_status": [
+            e.value for e in ControlStatus
+        ],
+        "lsr_rule": [
+            e.value for e in LSRRule
+        ],
         "sites": repository.sites(),
         "activities": repository.activities(),
         "rubric_version": settings.rubric_version,
         "prompt_version": settings.prompt_version,
         "min_group_n": aggregate.MIN_GROUP_N,
-        "database": "connected" if db.is_live() else "not_configured",
-        # Schema-failure and fallback rates as measured numbers, not hopes.
+        "database": (
+            "connected"
+            if db.is_live()
+            else "not_configured"
+        ),
         "metrics": classifier.metrics(),
     }
 
 
-# ---------------------------------------------------------------------------
-# Screen 1 — live analyse box
-# ---------------------------------------------------------------------------
+# ============================================================================
+# SCREEN 1 — ANALYZE REPORT
+# ============================================================================
 
-
-@router.post("/analyze", response_model=AnalyzeResponse, tags=["analyze"])
+@router.post(
+    "/analyze",
+    response_model=AnalyzeResponse,
+    tags=["analyze"],
+)
 def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
-    """Classify one free-text report.
 
-    `is_fallback` is true when the primary classifier failed, timed out, or returned output the
-    schema rejected twice, and the local baseline answered instead. The UI must show that plainly
-    as "degraded mode — keyword baseline" rather than quietly serving a weaker answer.
-    """
     try:
-        outcome = classifier.classify(payload.report_text)
+        outcome = classifier.classify(
+            payload.report_text
+        )
+
     except classifier.ClassificationUnavailable as exc:
-        # Both classifiers are down. Say so; never invent a label.
-        raise HTTPException(status_code=503, detail=f"classification unavailable: {exc}") from exc
+        raise HTTPException(
+            status_code=503,
+            detail=f"classification unavailable: {exc}",
+        ) from exc
+
+    result = outcome.result.model_copy(
+        update={
+            "recommended_check": recommended_check_for(
+                outcome.result.lsr_rule,
+                outcome.result.is_sif_precursor,
+            )
+        }
+    )
 
     return AnalyzeResponse(
-        result=outcome.result,
+        result=result,
         model_version=outcome.model_version,
         is_fallback=outcome.is_fallback,
         latency_ms=outcome.latency_ms,
@@ -237,90 +989,452 @@ def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# Screen 2 — ranked report queue
-# ---------------------------------------------------------------------------
+# ============================================================================
+# WORKER REPORT
+# ============================================================================
+
+@router.post(
+    "/reports/worker",
+    response_model=AnalyzeResponse,
+    tags=["reports"],
+    summary="Submit Worker Report",
+)
+def submit_worker_report(
+    payload: WorkerReportRequest,
+) -> AnalyzeResponse:
+
+    # ------------------------------------------------------------------------
+    # STEP 1 — MAKE SURE DATABASE IS CONFIGURED
+    # ------------------------------------------------------------------------
+
+    if not db.is_live():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Database is not configured. "
+                "Worker reports cannot be saved until "
+                "SUPABASE_DB_URL is configured."
+            ),
+        )
+
+    # ------------------------------------------------------------------------
+    # STEP 2 — CLASSIFY
+    # ------------------------------------------------------------------------
+
+    try:
+        outcome = classifier.classify(
+            payload.report_text
+        )
+
+    except classifier.ClassificationUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"classification unavailable: {exc}",
+        ) from exc
+
+    # ------------------------------------------------------------------------
+    # STEP 3 — STATIC RECOMMENDED CHECK
+    # ------------------------------------------------------------------------
+
+    result = outcome.result.model_copy(
+        update={
+            "recommended_check": recommended_check_for(
+                outcome.result.lsr_rule,
+                outcome.result.is_sif_precursor,
+            )
+        }
+    )
+
+    # ------------------------------------------------------------------------
+    # STEP 4 — CREATE UNIQUE REPORT ID
+    # ------------------------------------------------------------------------
+
+    report_id = f"worker-{uuid.uuid4()}"
+
+    # ------------------------------------------------------------------------
+    # STEP 5 — SAVE REPORT + PREDICTION
+    # ------------------------------------------------------------------------
+
+    try:
+
+        # --------------------------------------------------------------------
+        # Ensure the submitted site exists before inserting the report.
+        # --------------------------------------------------------------------
+
+        db.execute(
+            """
+            INSERT INTO sites (site)
+            VALUES (%(site)s)
+            ON CONFLICT (site) DO NOTHING
+            """,
+            {
+                "site": payload.site
+            },
+        )
+
+        # --------------------------------------------------------------------
+        # SAVE THE ORIGINAL WORKER REPORT
+        # --------------------------------------------------------------------
+
+        insert_report_sql = """
+        INSERT INTO reports (
+            report_id,
+            report_text,
+            source,
+            site,
+            activity,
+            shift,
+            report_date,
+            is_contractor
+        )
+        VALUES (
+            %(report_id)s,
+            %(report_text)s,
+            %(source)s,
+            %(site)s,
+            %(activity)s,
+            %(shift)s,
+            %(report_date)s,
+            %(is_contractor)s
+        )
+        """
+
+        db.execute(
+            insert_report_sql,
+            {
+                "report_id": report_id,
+                "report_text": payload.report_text,
+                "source": "synthetic",
+                "site": payload.site,
+                "activity": payload.activity,
+                "shift": payload.shift,
+                "report_date": date.today(),
+                "is_contractor": payload.is_contractor,
+            },
+        )
+
+        # --------------------------------------------------------------------
+        # SAVE CLASSIFICATION
+        # --------------------------------------------------------------------
+
+        db.insert_prediction(
+            report_id=report_id,
+            result=result,
+            model_version=outcome.model_version,
+            is_fallback=outcome.is_fallback,
+        )
+
+        # --------------------------------------------------------------------
+        # CREATE INITIAL STATUS
+        # --------------------------------------------------------------------
+
+        db.execute(
+            """
+            INSERT INTO report_status (
+                report_id,
+                status
+            )
+            VALUES (
+                %(report_id)s,
+                'active'
+            )
+            ON CONFLICT (report_id)
+            DO NOTHING
+            """,
+            {
+                "report_id": report_id
+            },
+        )
+
+        log.info(
+            "Worker report saved successfully: %s",
+            report_id,
+        )
+
+    except Exception as exc:
+
+        traceback.print_exc()
+
+        log.exception(
+            "FAILED TO SAVE WORKER REPORT %s",
+            report_id,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to save worker report: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+    # ------------------------------------------------------------------------
+    # STEP 6 — RETURN RESULT TO FRONTEND
+    # ------------------------------------------------------------------------
+
+    return AnalyzeResponse(
+        result=result,
+        model_version=outcome.model_version,
+        is_fallback=outcome.is_fallback,
+        latency_ms=outcome.latency_ms,
+        created_at=datetime.now(timezone.utc),
+    )
 
 
-@router.get("/reports", response_model=ReportPage, tags=["reports"])
+# ============================================================================
+# ADMIN TRIAGE — GET REPORTS
+# ============================================================================
+
+@router.get(
+    "/reports",
+    response_model=ReportPage,
+    tags=["reports"],
+)
 def reports(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+
+    limit: int = Query(
+        20,
+        ge=1,
+        le=100,
+    ),
+
+    offset: int = Query(
+        0,
+        ge=0,
+    ),
+
     is_sif_precursor: bool | None = None,
     lsr_rule: LSRRule | None = None,
     site: str | None = None,
     source: str | None = None,
     q: str | None = None,
+
 ) -> ReportPage:
-    """Precursors first, then severity descending. The ranked order is the product."""
+
     items, total = repository.list_reports(
         limit=limit,
         offset=offset,
         is_sif_precursor=is_sif_precursor,
-        lsr_rule=lsr_rule.value if lsr_rule else None,
+        lsr_rule=(
+            lsr_rule.value
+            if lsr_rule
+            else None
+        ),
         site=site,
         source=source,
         q=q,
     )
-    return ReportPage(items=items, total=total, limit=limit, offset=offset)
+
+    return ReportPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
-@router.get("/reports/{report_id}", response_model=ReportDetail, tags=["reports"])
-def report_detail(report_id: str) -> ReportDetail:
-    found = repository.get_report(report_id)
+# ============================================================================
+# GET ONE REPORT
+# ============================================================================
+
+@router.get(
+    "/reports/{report_id}",
+    response_model=ReportDetail,
+    tags=["reports"],
+)
+def report_detail(
+    report_id: str,
+) -> ReportDetail:
+
+    found = repository.get_report(
+        report_id
+    )
+
     if found is None:
-        raise HTTPException(status_code=404, detail=f"report {report_id} not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"report {report_id} not found",
+        )
+
     return found
 
 
-@router.patch("/reports/{report_id}/status", response_model=ReportDetail, tags=["reports"])
-def update_report_status(report_id: str, payload: StatusUpdateRequest) -> ReportDetail:
-    """Screen 2's "Acknowledge & Dispatch" / "Mark as Reviewed & Archive" actions.
+# ============================================================================
+# UPDATE REPORT STATUS
+#
+# active → dispatched → archived
+# ============================================================================
 
-    Idempotent — setting the same status twice is a no-op, not an error, so a flaky click or a
-    retried request never breaks the queue.
-    """
-    updated = repository.update_status(report_id, payload.status)
-    if updated is None:
-        raise HTTPException(status_code=404, detail=f"report {report_id} not found")
-    return updated
+@router.patch(
+    "/reports/{report_id}/status",
+    tags=["reports"],
+)
+def update_report_status(
+
+    report_id: str,
+    payload: StatusUpdateRequest,
+
+) -> dict:
+
+    if not db.is_live():
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not configured.",
+        )
+
+    try:
+
+        # First check whether the report exists.
+
+        rows = db.query(
+            """
+            SELECT report_id
+            FROM reports
+            WHERE report_id = %(report_id)s
+            """,
+            {
+                "report_id": report_id
+            },
+        )
+
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"report {report_id} not found",
+            )
+
+        # Insert status if it doesn't exist.
+        # Otherwise update it.
+
+        db.execute(
+            """
+            INSERT INTO report_status (
+                report_id,
+                status,
+                updated_at
+            )
+            VALUES (
+                %(report_id)s,
+                %(status)s,
+                NOW()
+            )
+            ON CONFLICT (report_id)
+            DO UPDATE SET
+                status = EXCLUDED.status,
+                updated_at = NOW()
+            """,
+            {
+                "report_id": report_id,
+                "status": payload.status,
+            },
+        )
+
+        return {
+            "report_id": report_id,
+            "status": payload.status,
+            "message": "Report status updated successfully.",
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+
+        traceback.print_exc()
+
+        log.exception(
+            "FAILED TO UPDATE REPORT STATUS %s",
+            report_id,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to update report status: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
 
 
-# ---------------------------------------------------------------------------
-# Screen 3 — density dashboard
-# ---------------------------------------------------------------------------
+# ============================================================================
+# DASHBOARD — SUMMARY
+# ============================================================================
 
-
-@router.get("/aggregate/summary", response_model=AggregateSummary, tags=["aggregate"])
+@router.get(
+    "/aggregate/summary",
+    response_model=AggregateSummary,
+    tags=["aggregate"],
+)
 def aggregate_summary() -> AggregateSummary:
+
     return aggregate.summary()
 
 
-@router.get("/aggregate/sites", response_model=SiteAggregateResponse, tags=["aggregate"])
-def aggregate_sites() -> SiteAggregateResponse:
-    """Ranked by precursor_rate DESC then precursor_count DESC.
+# ============================================================================
+# DASHBOARD — SITES
+# ============================================================================
 
-    Sites under MIN_GROUP_N reports are in `insufficient_volume` — grey them out, do not hide
-    them. Rate, not raw count, so a site is not punished for reporting diligently.
-    """
+@router.get(
+    "/aggregate/sites",
+    response_model=SiteAggregateResponse,
+    tags=["aggregate"],
+)
+def aggregate_sites() -> SiteAggregateResponse:
+
     return aggregate.sites()
 
 
-@router.get("/aggregate/activities", response_model=ActivityAggregateResponse, tags=["aggregate"])
+# ============================================================================
+# DASHBOARD — ACTIVITIES
+# ============================================================================
+
+@router.get(
+    "/aggregate/activities",
+    response_model=ActivityAggregateResponse,
+    tags=["aggregate"],
+)
 def aggregate_activities() -> ActivityAggregateResponse:
+
     return aggregate.activities()
 
 
-@router.get("/aggregate/rules", response_model=list[RuleControlBucket], tags=["aggregate"])
+# ============================================================================
+# DASHBOARD — RULES
+# ============================================================================
+
+@router.get(
+    "/aggregate/rules",
+    response_model=list[RuleControlBucket],
+    tags=["aggregate"],
+)
 def aggregate_rules() -> list[RuleControlBucket]:
+
     return aggregate.rules()
 
 
-@router.get("/aggregate/shifts", response_model=list[ShiftAggregate], tags=["aggregate"])
+# ============================================================================
+# DASHBOARD — SHIFTS
+# ============================================================================
+
+@router.get(
+    "/aggregate/shifts",
+    response_model=list[ShiftAggregate],
+    tags=["aggregate"],
+)
 def aggregate_shifts() -> list[ShiftAggregate]:
+
     return aggregate.shifts()
 
 
-@router.get("/aggregate/trend", response_model=list[TrendPoint], tags=["aggregate"])
+# ============================================================================
+# DASHBOARD — TREND
+# ============================================================================
+
+@router.get(
+    "/aggregate/trend",
+    response_model=list[TrendPoint],
+    tags=["aggregate"],
+)
 def aggregate_trend() -> list[TrendPoint]:
+
     return aggregate.trend()

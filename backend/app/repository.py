@@ -1,11 +1,10 @@
-﻿"""Data access - one seam over "real database" and "seeded stub".
+﻿"""
+Repository — all report reads go through this file.
 
-Every read in the API goes through here. When `SUPABASE_DB_URL` is set the queries in
-`sql/aggregates.sql` run against Postgres; when it is not, the seeded stub answers with the same
-shapes. Callers cannot tell, which is what let the frontend be built on day 3.
+When the database is configured, reports are read directly from Postgres.
+Worker-submitted reports and their latest predictions are joined together.
 
-The live path is written but **unverified until a Supabase project exists** - see
-docs/handoff/member-4-remaining.md. The stub path is the one under test.
+No seeded data is mixed into the live database mode.
 """
 
 from __future__ import annotations
@@ -14,47 +13,105 @@ import logging
 
 from . import db
 from .schemas import ReportDetail, ReportSummary
-from .stub import REPORTS as STUB_REPORTS
 
 log = logging.getLogger(__name__)
 
 _SUMMARY_FIELDS = set(ReportSummary.model_fields)
 
-_stub_status_overrides: dict[str, str] = {}
+
+# ---------------------------------------------------------------------------
+# READ REPORTS + THEIR LATEST PREDICTION
+# ---------------------------------------------------------------------------
 
 SELECT_REPORTS = """
-SELECT r.report_id, r.report_text, r.source, r.site, r.activity, r.shift,
-       r.report_date, r.is_contractor, r.created_at,
-       l.is_sif_precursor, l.severity, l.lsr_rule, l.control_status, l.confidence,
-       l.model_version, l.classified_at,
-       COALESCE(s.status, 'active') AS status
+SELECT
+    r.report_id,
+    r.report_text,
+    r.source,
+    r.site,
+    r.activity,
+    r.shift,
+    r.report_date,
+    r.is_contractor,
+    r.created_at,
+
+    l.is_sif_precursor,
+    l.severity,
+    l.lsr_rule,
+    l.control_status,
+    l.confidence,
+    l.model_version,
+    r.created_at AS classified_at,
+
+    COALESCE(s.status, 'active') AS status
+
 FROM reports r
-LEFT JOIN latest_predictions l ON l.report_id = r.report_id
-LEFT JOIN report_status s ON s.report_id = r.report_id
+
+LEFT JOIN latest_predictions l
+    ON l.report_id = r.report_id
+
+LEFT JOIN report_status s
+    ON s.report_id = r.report_id
+
+ORDER BY r.created_at DESC
 """
 
 
 def live() -> bool:
+    """Return True when a database connection is configured."""
     return db.is_live()
 
 
 def _rows_from_db() -> list[ReportDetail]:
-    return [ReportDetail(**row) for row in db.query(SELECT_REPORTS)]
+    """
+    Read all reports from the live database.
+
+    Any database error is logged instead of silently returning fake data.
+    """
+
+    rows = db.query(SELECT_REPORTS)
+
+    log.info(
+        "Loaded %s reports from database",
+        len(rows)
+    )
+
+    reports: list[ReportDetail] = []
+
+    for row in rows:
+        try:
+            reports.append(
+                ReportDetail(**row)
+            )
+
+        except Exception as exc:
+            log.exception(
+                "Failed to convert database row to ReportDetail. "
+                "report_id=%s error=%s",
+                row.get("report_id"),
+                exc,
+            )
+            raise
+
+    return reports
 
 
 def all_reports() -> list[ReportDetail]:
+    """
+    Return reports from the live database.
+
+    We deliberately do NOT fall back to seeded reports when a database
+    is configured. Mixing live and fake data makes dashboard debugging
+    extremely confusing.
+    """
+
     if not live():
-        if not _stub_status_overrides:
-            return STUB_REPORTS
-        return [
-            r.model_copy(update={"status": _stub_status_overrides.get(r.report_id, r.status)})
-            for r in STUB_REPORTS
-        ]
-    try:
-        return _rows_from_db()
-    except Exception as exc:  # noqa: BLE001
-        log.error("database read failed, serving seeded stub: %s: %s", type(exc).__name__, exc)
-        return STUB_REPORTS
+        log.warning(
+            "Database is not configured. Returning no reports."
+        )
+        return []
+
+    return _rows_from_db()
 
 
 def list_reports(
@@ -66,19 +123,53 @@ def list_reports(
     source: str | None = None,
     q: str | None = None,
 ) -> tuple[list[ReportSummary], int]:
+
     items = all_reports()
 
+    # -----------------------------------------------------------------------
+    # FILTERS
+    # -----------------------------------------------------------------------
+
     if is_sif_precursor is not None:
-        items = [r for r in items if r.is_sif_precursor is is_sif_precursor]
+        items = [
+            r for r in items
+            if r.is_sif_precursor is is_sif_precursor
+        ]
+
     if lsr_rule:
-        items = [r for r in items if r.lsr_rule == lsr_rule]
+        items = [
+            r for r in items
+            if r.lsr_rule is not None
+            and r.lsr_rule.value == lsr_rule
+        ]
+
     if site:
-        items = [r for r in items if r.site == site]
+        items = [
+            r for r in items
+            if r.site == site
+        ]
+
     if source:
-        items = [r for r in items if r.source == source]
+        items = [
+            r for r in items
+            if r.source == source
+        ]
+
     if q:
         needle = q.lower()
-        items = [r for r in items if needle in r.report_text.lower()]
+
+        items = [
+            r for r in items
+            if needle in r.report_text.lower()
+        ]
+
+    # -----------------------------------------------------------------------
+    # SORT
+    #
+    # SIF precursors first
+    # Then highest severity
+    # Then newest report
+    # -----------------------------------------------------------------------
 
     items = sorted(
         items,
@@ -87,36 +178,92 @@ def list_reports(
             -(r.severity or 0),
             r.report_date,
         ),
+        reverse=False,
     )
 
     total = len(items)
-    page = [
-        ReportSummary(**r.model_dump(include=_SUMMARY_FIELDS))
-        for r in items[offset : offset + limit]
+
+    page_items = items[
+        offset: offset + limit
     ]
+
+    page = [
+        ReportSummary(
+            **report.model_dump(
+                include=_SUMMARY_FIELDS
+            )
+        )
+        for report in page_items
+    ]
+
+    log.info(
+        "Returning %s of %s reports",
+        len(page),
+        total,
+    )
+
     return page, total
 
 
-def get_report(report_id: str) -> ReportDetail | None:
-    return next((r for r in all_reports() if str(r.report_id) == str(report_id)), None)
+def get_report(
+    report_id: str,
+) -> ReportDetail | None:
+
+    reports = all_reports()
+
+    for report in reports:
+
+        if str(report.report_id) == str(report_id):
+
+            return report
+
+    return None
 
 
-def update_status(report_id: str, status: str) -> ReportDetail | None:
-    found = get_report(report_id)
-    if found is None:
+def update_status(
+    report_id: str,
+    status: str,
+) -> ReportDetail | None:
+
+    report = get_report(report_id)
+
+    if report is None:
         return None
 
-    if live():
-        db.set_report_status(report_id, status)
-    else:
-        _stub_status_overrides[str(report_id)] = status
+    if not live():
+
+        log.warning(
+            "Cannot update report status because "
+            "the database is not configured."
+        )
+
+        return None
+
+    db.set_report_status(
+        report_id,
+        status,
+    )
 
     return get_report(report_id)
 
 
 def sites() -> list[str]:
-    return sorted({r.site for r in all_reports() if r.site})
+
+    return sorted(
+        {
+            report.site
+            for report in all_reports()
+            if report.site
+        }
+    )
 
 
 def activities() -> list[str]:
-    return sorted({r.activity for r in all_reports() if r.activity})
+
+    return sorted(
+        {
+            report.activity
+            for report in all_reports()
+            if report.activity
+        }
+    )
