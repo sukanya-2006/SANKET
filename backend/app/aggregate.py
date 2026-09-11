@@ -69,8 +69,76 @@ def _current_model_version() -> str:
     return classifier.active_versions()["primary"]
 
 
+BEST_VERSION_SQL = """
+SELECT p.model_version, count(DISTINCT p.report_id) AS covered, max(p.created_at) AS newest
+FROM predictions p
+JOIN reports r ON r.report_id = p.report_id
+WHERE r.source <> 'osha' AND NOT p.is_fallback
+GROUP BY p.model_version
+ORDER BY covered DESC, newest DESC
+"""
+
+
+def reporting_version() -> str:
+    """The model version the dashboard should report on.
+
+    Normally this is whatever is registered as primary. But a prompt edit moves the version
+    string, and until the whole corpus has been re-classified under it the aggregates - which
+    scope to one version so they never average two models together - have nothing to count.
+
+    That is not a hypothetical either. Fixing a prompt leak on 11 September moved the version
+    to `...clean1`, the deploy picked it up within minutes, and the live dashboard went to
+    `total_reports: 0` with an empty site ranking. Every number was correct and the screen was
+    blank, because re-classifying 209 reports takes days on a rate-limited free tier.
+
+    A dashboard that empties itself whenever the prompt improves is punishing the right
+    behaviour. So: if the current version covers nothing, fall back to the version with the
+    most coverage - ONE version, never a blend, which is the rule that matters. Every response
+    already carries `model_version`, so the screen can name the prompt it is showing, and the
+    fallback is visible rather than silent.
+
+    Fallback rows are excluded from the coverage count: a version whose only rows came from
+    the baseline answering is not a version with coverage.
+    """
+    current = _current_model_version()
+
+    if not db.is_live():
+        return current
+
+    try:
+        rows = db.query(BEST_VERSION_SQL)
+    except Exception as exc:  # noqa: BLE001
+        log.error("could not pick a reporting version (%s: %s); using the current one",
+                  type(exc).__name__, exc)
+        return current
+
+    if not rows:
+        return current
+
+    coverage = {r["model_version"]: r["covered"] for r in rows}
+    best, best_n = rows[0]["model_version"], rows[0]["covered"]
+    current_n = coverage.get(current, 0)
+
+    # Most coverage wins, and the current version wins ties.
+    #
+    # "Any coverage at all" is not enough: a re-classification in progress has a handful of
+    # rows under the new version, and preferring it would show a three-report dashboard while
+    # two hundred finished predictions sat one version away. Comparing totals also makes the
+    # switch-over automatic - the moment the new version overtakes, it takes over, with no
+    # flag to remember to flip.
+    if current_n >= best_n:
+        return current
+
+    log.warning(
+        "reporting on %s (%d reports) rather than %s (%d) - the newer version does not "
+        "cover the corpus yet",
+        best, best_n, current, current_n,
+    )
+    return best
+
+
 def _params() -> dict:
-    return {"model_version": _current_model_version(), "min_group_n": MIN_GROUP_N}
+    return {"model_version": reporting_version(), "min_group_n": MIN_GROUP_N}
 
 
 def _sql(name: str) -> list[dict] | None:
@@ -108,8 +176,8 @@ def _scope() -> list[ReportDetail]:
     if not db.is_live():
         return synthetic
 
-    current_version = _current_model_version()
-    return [r for r in synthetic if r.model_version == current_version]
+    version = reporting_version()
+    return [r for r in synthetic if r.model_version == version]
 
 
 def _rate(precursors: int, total: int) -> float:
@@ -164,7 +232,7 @@ def summary() -> AggregateSummary:
         ),
         avg_confidence=round(sum(confidences) / len(confidences), 4) if confidences else 0.0,
         median_triage_seconds=round(median(latencies), 2) if latencies else 0.0,
-        model_version=_current_model_version(),
+        model_version=reporting_version(),
         last_updated=datetime.now(timezone.utc),
     )
 

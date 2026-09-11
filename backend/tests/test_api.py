@@ -592,6 +592,32 @@ def test_every_named_sql_statement_parses():
         assert db.statement(name).strip()
 
 
+def test_dashboard_does_not_empty_itself_when_the_prompt_improves():
+    """A prompt fix must not blank the dashboard until the corpus is re-classified.
+
+    Aggregates scope to ONE model_version so they never average two models together. But a
+    prompt edit moves the version string, and re-classifying the corpus takes days on a
+    rate-limited tier - so between the deploy and the last report, every number is correct and
+    the screen is empty.
+
+    That happened. Fixing a prompt leak on 11 September moved the version to ...clean1, the
+    deploy picked it up within minutes, and the live dashboard went to total_reports 0 with an
+    empty site ranking. A dashboard that empties itself whenever the prompt improves is
+    punishing the right behaviour.
+
+    reporting_version() picks the version with the most coverage, current version winning ties,
+    so the switch-over happens on its own and there is no flag to remember to flip. It is still
+    ONE version, never a blend, which is the rule that actually matters.
+    """
+    from app import aggregate
+
+    assert aggregate.reporting_version(), "must always name some version"
+
+    body = client.get("/aggregate/summary").json()
+    assert body["total_reports"] > 0, "the dashboard must never be empty"
+    assert body["model_version"], "the response must name the version it counted"
+
+
 def test_queue_puts_precursors_first_then_severity():
     """The ranked order is the product, so it lives in the API, not in the client."""
     items = client.get("/reports", params={"limit": 40}).json()["items"]
