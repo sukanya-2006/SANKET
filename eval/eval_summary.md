@@ -14,28 +14,39 @@ python agreement.py                       # round two agreement, not independent
 
 ---
 
-## The two numbers to quote
+## The numbers to quote
 
 | | F1 | how it was measured | n |
 |---|---|---|---|
-| **LLM, prompt v4** | **0.776** | held out; the model never saw the labels | 65 |
+| **LLM, prompt g2fix1** | **0.822** | held out; the model never saw the labels | 71 |
+| LLM, previous prompt | 0.776 | same method, before the Gate 2 fix | 65 |
 | **TF-IDF baseline** | **0.754** ± 0.077 | 5-fold cross-validated, refit inside each fold | 114 |
 
-Neither is bounded by an annotator-agreement figure. See the labelling section below for what
-the agreement numbers do and do not say.
+Baseline PR-AUC is 0.847 ± 0.032. LLM precision is 0.857, recall 0.789.
 
-PR-AUC for the baseline is 0.847 ± 0.032.
+**The LLM is ahead of the baseline, and the gap is widening as the prompt is fixed.** It was
+*behind* on 9 September (0.719 against 0.784). Both moves came from finding and fixing our own
+prompt bugs, not from changing the model.
 
-**The LLM is now ahead of the baseline.** It was behind as recently as 9 September (0.719
-against 0.784), and the thing that changed was a prompt bug, not the model.
+### Say this before anyone asks
 
-### Say this out loud before anyone asks
+The rows are **not scored on the same pool**. The baseline is cross-validated over 114 reports;
+the LLM is scored on the reports that have both a gold label and a stored prediction under that
+prompt version. Treat the gap as indicative rather than decisive.
 
-The two rows are **not scored on the same pool**, so treat the gap as indicative rather than
-decisive. The baseline is cross-validated over 114 reports; the LLM is scored on the 65 that
-have both a gold label and a stored prediction under that prompt version. Putting both on one
-pool needs a full re-run, which is a token-budget problem rather than a hard one — see the
-rate-limit note at the bottom.
+### The labels
+
+180 reports, two annotators, a written and versioned rubric.
+
+Round one was run independently and agreed **52.2%**, Cohen's kappa 0.083. Severity was the
+gate that split them — 14.4% agreement, 3 to 4 points apart on 76 of 180 reports. That drove
+the v2.1 → v2.2 revision, which rewrote exactly that gate.
+
+Round two agreed **96.1%**, but was **not run independently**, so it is not a ceiling and we do
+not quote it as one. It is evidence the revision worked.
+
+We therefore have no quotable agreement ceiling. `prepare_independent_recheck.py` samples 40
+reports for a fresh independent pass, which is about two hours and would give us one.
 
 ---
 
@@ -116,9 +127,7 @@ examples. Verified by hand on the exact miss pattern:
 "A worker was struck by a reversing vehicle in the yard."  -> unclear  precursor False
 ```
 
-**The g2fix1 numbers are not measured yet.** Re-run `batch_classify.py` and then
-`score_stored_predictions.py` before quoting anything for it. Nothing in the table above
-includes this change.
+**g2fix1 is now measured.** F1 went 0.776 → **0.822**, precision 0.767 → **0.857**. Gate 2 fell from 100% of all misses to 75% of a smaller set, and the mean severity shift tightened from +0.28 to +0.14. The fix did what it was aimed at.
 
 ---
 

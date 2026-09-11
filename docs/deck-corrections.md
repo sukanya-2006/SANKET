@@ -48,7 +48,7 @@ the stub it stayed that way. Both are fixed.
 
 ```
 Prototype Evaluation:
-● LLM (prompt v4): F1 0.776 — held out, n=65
+● LLM (prompt g2fix1): F1 0.822 — held out, n=71
 ● TF-IDF baseline: F1 0.754 ± 0.077, PR-AUC 0.847 — 5-fold CV, n=114
 ● OSHA generalisation: F1 0.118 (n=30 — too small to conclude from)
 ● Labels: 180 reports, two annotators, written rubric (v2.2). Round 1 independent:

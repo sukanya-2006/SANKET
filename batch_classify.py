@@ -173,7 +173,20 @@ def main():
         text = report["report_text"]
 
         try:
-            outcome = classifier.classify(text)
+            # use_cache=False is load-bearing, not an optimisation.
+            #
+            # The cache is keyed on sha256(text + prompt_version) and returns the answer AND
+            # the model_version that produced it. On a hit, this loop would store a prediction
+            # stamped with the OLD model version - so a run meant to measure a new prompt
+            # silently re-files old answers under the old name, and the new version looks like
+            # it covered far fewer reports than the run reported storing.
+            #
+            # That happened: a 209-report pass reported 173 stored, of which only 74 were
+            # actually the new version. The other 99 were cache replays.
+            #
+            # A batch run exists to produce predictions under the model we ship today. It must
+            # call it.
+            outcome = classifier.classify(text, use_cache=False)
 
             # A fallback is the baseline stub answering because the model could not be
             # reached. Storing it under a run meant to measure the model puts an answer
