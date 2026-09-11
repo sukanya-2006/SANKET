@@ -73,14 +73,18 @@ That triggered a documented rubric revision, **v2.1 → v2.2**, rewriting the se
 one-change rule is stated first, and the bands were changed from adjectives to observable
 outcomes.
 
-> **OPEN QUESTION — unresolved.** Every one of the 173 rows in `data/gold_labels.csv` records
-> `rubric_version` **2.1**; none records 2.2. The attribution above, and the 52.2% → 96.1%
-> story everywhere else in this file, credits the improvement to v2.2. Rubric §10.6 is explicit
-> that labels made under two versions are not the same measurement, so this is not a typo we
-> can wave through. We have not edited the labels, because we do not know which document round
-> two was actually run against — guessing would invent the provenance. Whoever ran round two
-> has to say, and the column has to be corrected to match. Until then the v2.2 attribution is
-> unconfirmed.
+> **BOTH LABELLING ROUNDS USED RUBRIC v2.1.** Confirmed by Member 1 on 11 September, and
+> consistent with all 173 rows in `data/gold_labels.csv` recording `rubric_version 2.1`.
+>
+> So the move from 52.2% to 96.1% **cannot be attributed to the v2.2 revision** — the revision
+> was never applied to a label. The one thing known to differ between the rounds is that the
+> second was not run independently, which is the simplest explanation for the whole jump.
+>
+> A second consequence, easy to miss: the shipped prompt encodes **v2.2** (the one-change rule,
+> the observable-outcome severity bands) while the gold labels encode **v2.1**. Part of every
+> model-versus-gold disagreement is therefore a rubric mismatch rather than model error, and it
+> lands hardest on Gate 3 — exactly where the disagreements are. Any future re-labelling should
+> be done under v2.2 so the model and the labels are graded against the same document.
 
 Round two scored 96.1% agreement, kappa 0.922 — **round two, not independent, not a ceiling**.
 The annotators did not work separately the second time, so those numbers are evidence that the

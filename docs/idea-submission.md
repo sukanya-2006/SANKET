@@ -77,15 +77,23 @@ suggestion and commercial products already do it. Four things are ours:
    than collapsed into one risk score. This is what lets the system distinguish a real hazard where
    the barrier held — not a precursor — from an identical-sounding report where it did not, and it
    is what makes a disagreement legible instead of a matter of trust.
-2. **A rubric revised by measurement, not by argument.** Two annotators labelled all 180 reports
-   against a written, versioned rubric. Round one was independent and agreed 52.2% on precursor
-   status, Cohen's kappa 0.083 — severity was the gate that split us, disagreeing by three or four
-   points on 76 of the 180. So we rewrote that gate: the one-change rule stated first, the severity
-   bands rewritten from adjectives into observable outcomes. Round two agreed 96.1%, kappa 0.922,
-   but it was **not run independently, so we do not quote it as a ceiling** — it is evidence the
-   revision worked, not a bound on the system. Claiming a ceiling would take a fresh independent
-   pass, and we would rather report that number than one we cannot defend. 173 of the 180 reports
-   are agreed; 7 remain open.
+2. **A labelling process we report honestly, including where it failed.** Two annotators labelled
+   all 180 reports against a written, versioned rubric. Round one was independent and agreed just
+   **52.2%** on precursor status, Cohen's kappa **0.083** — severity was the gate that split them,
+   disagreeing by three or four points on 76 of the 180. We rewrote that gate: the one-change rule
+   stated first, the severity bands changed from adjectives into observable outcomes.
+
+   Round two agreed 96.1%. We quote **neither** number as a ceiling, and we will not claim the
+   rewrite caused the jump: round two was not run independently, and both rounds were labelled
+   under the **same rubric version**, so the rewrite was never actually applied to a label. The
+   one thing known to differ between the rounds is the loss of independence, and that alone
+   explains the move. A defensible agreement number needs a fresh independent pass, which is
+   worksheeted and waiting.
+
+   We are stating this because it is what the data supports. A team that reports the round where
+   its process failed, and declines to credit itself for a fix it cannot demonstrate, is telling
+   you something useful about every other number on the page. 173 of the 180 reports are agreed;
+   7 remain open.
 3. **Density aggregation by site, activity and barrier**, reported as a rate rather than a count.
    Raw counts penalise sites that report diligently, which is the opposite of the incentive a
    safety system should create. Groups below a minimum volume are shown but not ranked, so a site

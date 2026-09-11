@@ -106,7 +106,7 @@ into observable outcomes.
 **Round two scored 96.1%, kappa 0.922 — but it was not run independently, so it is not a
 ceiling.** "No discussion until both finish" was the rule and round two did not keep it. A kappa
 computed after two annotators have reconciled measures how well they agree once they already
-agree; it says nothing about how hard the task is. It is evidence the revision worked, and
+agree; it says nothing about how hard the task is. It cannot be credited to the rubric revision - both rounds used v2.1 - and
 nothing stronger. Wherever it appears, it appears labelled **not independent — not a ceiling**.
 
 The labels are still good: 173 agreed, 7 open (10, 20, 51, 60, 96, 139, 149). Adjudicated labels
@@ -164,7 +164,7 @@ costs a life, a false alarm costs twenty minutes.
   on the team wrote.
 - *"What is your inter-annotator agreement?"* — First round was independent: 52%, kappa 0.083,
   and severity was the gate that split us, so we rewrote it. Second round agreed 96%, but it was
-  not run independently, so we do not quote it as a ceiling — it is evidence the revision worked,
+  not run independently, so we do not quote it as a ceiling — it cannot be credited to the revision,
   not a bound on the system. A fresh independent pass would give us a real number, and we would
   rather report that one.
 - *Why hold out a test set* — tuning against your test score fits the model to the answers rather

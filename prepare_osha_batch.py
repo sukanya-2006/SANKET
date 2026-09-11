@@ -16,7 +16,7 @@ labels and no Cohen's kappa, because agreement can only be measured on
 reports both people judged. We have no independent kappa to quote yet: round
 one was independent and scored 52.2% agreement, kappa 0.083. Round two scored
 96.1% / kappa 0.922 but was NOT run independently - it is evidence the v2.1 ->
-v2.2 severity revision worked, not a ceiling, and must not be quoted as one.
+revision worked either - both rounds used v2.1 - and must never be quoted as a ceiling.
 "Two of us labelled independently and agreed X% of the time" is the answer to
 "you wrote the reports and graded yourself", and only a genuinely independent
 pass can produce it. A disjoint split cannot support one at any volume.

@@ -111,9 +111,9 @@ find one for you.
 
 **"What does your agreement number actually claim?"**
 > Less than we used to claim, and we would rather say so. Our first round was independent and agreed
-> 52%, kappa 0.083 — severity was the gate that split us, so we rewrote it from adjectives into
+> 52%, kappa 0.083 — severity was the gate that split us, and we rewrote it from adjectives into
 > observable outcomes. The second round agreed 96%, but it was not run independently, so we do not
-> quote it as a ceiling: it is evidence the revision worked, not a bound on the system. Claiming a
+> quote it as a ceiling: we cannot separate the rubric's effect from the loss of independence. Claiming a
 > ceiling needs a fresh independent pass on a subset, which is a couple of hours, and we would
 > rather report that number than one we cannot defend.
 

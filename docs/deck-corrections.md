@@ -74,9 +74,9 @@ Prototype Evaluation:
 ● LLM: re-measurement in progress — the prompt it was scored under contained
   a held-out report, so the previous figure is withdrawn
 ● OSHA generalisation: F1 0.118 (n=30 — too small to conclude from)
-● Labels: 180 reports, two annotators, written rubric (v2.2). Round 1 independent:
-  52% agreement, kappa 0.083 — so we rewrote the severity gate. Round 2: 96%, but
-  not run independently — not a ceiling.
+● Labels: 180 reports, two annotators, written rubric (v2.1 for both rounds).
+  Round 1, independent: 52% agreement, kappa 0.083. Round 2: 96%, but not run
+  independently — so we quote neither as a ceiling.
 ```
 
 ### Why this ordering is the strongest version
@@ -86,14 +86,17 @@ ago (0.719 against 0.784), and what changed was a prompt bug, not the model. Tha
 story than a flat number, because it shows the evaluation was honest enough to catch our own
 mistake.
 
-Then the labels, and say the whole arc. *"Our first labelling round was independent and agreed
-52% — kappa 0.083. Severity was the gate that split us, so we rewrote it. The second round
-agreed 96%, but it was not run independently, so we do not quote it as a ceiling — it is
-evidence the revision worked, not a bound on the system."* That is the answer to "you wrote the
-reports and graded yourself": not one number no competitor will have, but a rubric revision no
-competitor will have measured before and after, on the gate that was actually failing. To claim
-a ceiling we would need a fresh independent pass, and we would rather report that number than
-one we cannot defend.
+Then the labels, and do not oversell them. *"Our first round was independent and agreed 52% —
+kappa 0.083, with severity the gate that split us. The second round agreed 96%, but it was not
+run independently, and both rounds used the same rubric. We cannot separate the effect of the
+rubric from the effect of working together, so we quote neither number as a ceiling. Getting one
+takes a fresh independent pass, and we would rather report that than a number we cannot
+defend."*
+
+That is a weaker claim than the one this document used to recommend, and it is the one that
+survives a follow-up question. The answer to "you wrote the reports and graded yourself" is no
+longer a headline agreement figure — it is the OSHA set: 30 real narratives nobody on the team
+wrote, scored separately and reported even though the result is poor.
 
 ### Three things to say before a judge asks
 

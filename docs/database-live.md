@@ -228,7 +228,7 @@ what drove the rubric revision from v2.1 to v2.2, and the revision targeted the 
 specifically: the one-change rule was stated first, and the severity bands were rewritten from
 adjectives into observable outcomes.
 
-Round two is what happened after that revision. It is evidence the revision worked, and
+Round two is what happened after that revision. It cannot be credited to the rubric revision - both rounds used v2.1 - and
 nothing stronger — not a bound on the system, not a number to beat. A real ceiling needs a
 fresh independent pass: a ~40-report subset, re-labelled with no contact between annotators, a
 couple of hours' work. We would rather report that number than one we cannot defend.

@@ -114,11 +114,12 @@ Six seconds of slack. That is intentional — you will lose more than that to th
 > Two of us labelled one hundred and eighty reports against a written rubric. Round one was
 > independent — fifty-two percent, kappa zero point zero eight three.
 >
-> Severity split us, so we rewrote it. Round two agreed ninety-six, but not independently —
+> Severity split us. Round two agreed ninety-six, but not independently, and on the same rubric —
 > evidence the rewrite worked, not a ceiling.
 
 *Round two was not independent, so it is not a ceiling — 96.1% and kappa 0.922 are evidence the
-rubric revision worked, nothing stronger. If a judge asks for a ceiling: we do not have one yet.
+what two people scored, credited to nothing — both rounds used the same rubric, so the revision
+cannot claim the jump. If a judge asks for a ceiling: we do not have one yet.
 The fix is a fresh independent pass over a forty-report subset, and we would rather quote that
 number than one we cannot defend.*
 

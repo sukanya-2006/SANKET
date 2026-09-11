@@ -73,7 +73,7 @@ Verified from a clean clone: 36 tests pass with no API key and no database.
 | **Rubric** | ✅ v2.2 — severity anchors rewritten after round one failed its agreement check |
 | **Dataset** | ✅ 150 synthetic + 30 real OSHA reports, with metadata |
 | **Labelling** | ⚠️ Round 1 complete (akanksha + sukanya, 180 each), run independently. **It failed the agreement check** — 52.2%, kappa 0.083 — which is what drove the rubric revision. See below |
-| **Round two** | ⚠️ Re-labelled against v2.2 — 96.1%, kappa 0.922, but **not run independently: evidence the revision worked, not a ceiling.** 173 agreed, 7 open (10, 20, 51, 60, 96, 139, 149) |
+| **Round two** | ⚠️ 96.1%, kappa 0.922 — but **not run independently, and labelled under v2.1 like round one**, so it is neither a ceiling nor evidence the v2.2 revision worked. 173 agreed, 7 open (10, 20, 51, 60, 96, 139, 149) |
 | **Tests** | ✅ 36, all real, no skips, hermetic |
 | **Frontend** | 🔴 Not started — Member 5 |
 
@@ -235,7 +235,7 @@ These are not decoration; they are what makes the numbers defensible.
 - **Human agreement is the ceiling — but only an agreement measured independently.** If two
   annotators agree 88% of the time, no classifier can honestly claim 95%. Our own round-two
   number does not qualify: 96.1% / kappa 0.922 was not run independently, so it is evidence the
-  v2.2 revision worked and never a ceiling. Our independent number is round one's 52.2% / kappa
+  revision worked (both rounds used v2.1) and never a ceiling. Our independent number is round one's 52.2% / kappa
   0.083, measured under the rubric we have since rewritten. Until the fresh independent pass is
   run, we quote no ceiling at all.
 - **`median_triage_seconds` is currently computed from synthetic timestamps.** It must not appear

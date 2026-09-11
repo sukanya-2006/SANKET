@@ -86,7 +86,7 @@ fingerprints, so the answer can be honest rather than hopeful.
 A legitimate second round exists on paper: the rubric fails its check, gets revised (see the
 changelog in [../docs/rubric.md](../docs/rubric.md)), and **both** annotators re-label from
 scratch without conferring. That produces a real ceiling. Round two here did only the first half
-— the annotators did not work independently the second time — so it is evidence the revision
+— the annotators did not work independently the second time — and both rounds used rubric v2.1, so the revision
 helped, not a ceiling. `prepare_independent_recheck.py` samples 40 reports for the independent
 pass that would give us one; the worksheets are already at `recheck_akanksha.csv` and
 `recheck_sukanya.csv`. Adjudicated files never produce a ceiling either — their agreement is

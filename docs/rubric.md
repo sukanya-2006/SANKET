@@ -393,6 +393,19 @@ changelog.
 ---
 
 ## Changelog
+> **BOTH LABELLING ROUNDS USED RUBRIC v2.1.** Confirmed by Member 1 on 11 September, and
+> consistent with all 173 rows in `data/gold_labels.csv` recording `rubric_version 2.1`.
+>
+> So the move from 52.2% to 96.1% **cannot be attributed to the v2.2 revision** — the revision
+> was never applied to a label. The one thing known to differ between the rounds is that the
+> second was not run independently, which is the simplest explanation for the whole jump.
+>
+> A second consequence, easy to miss: the shipped prompt encodes **v2.2** (the one-change rule,
+> the observable-outcome severity bands) while the gold labels encode **v2.1**. Part of every
+> model-versus-gold disagreement is therefore a rubric mismatch rather than model error, and it
+> lands hardest on Gate 3 — exactly where the disagreements are. Any future re-labelling should
+> be done under v2.2 so the model and the labels are graded against the same document.
+
 
 - **v2.2** — revised after the first agreement check failed. Severity was the broken gate:
   annotators agreed on it **14.4%** of the time, splitting by three or four points on 76 of 180
@@ -427,7 +440,8 @@ changelog.
   | Gate 1 `hazard_assessment` | — | 100%, kappa 1.000 |
   | Gate 2 `control_status` | — | 98.8%, kappa 0.978 |
 
-  The revision worked, and it worked on the gate it was aimed at. Severity now never disagrees
+  Read the second column with the caveat below: both rounds were labelled under v2.1, so the
+  change between them cannot be credited to the revision. Severity now never disagrees
   by more than one band on any report in the set. Six of the seven remaining headline
   disagreements straddle the 3/4 line, which is the boundary the label is defined on — that is
   the residue you would expect from two careful people, not a broken instruction.
