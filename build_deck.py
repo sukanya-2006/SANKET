@@ -53,6 +53,7 @@ GOLD_N = 173
 OPEN_TIEBREAKS = 7        # data/labeling_disagreements.csv
 
 LIVE_APP = "https://sanket-frontend.onrender.com"
+REPO = "github.com/sukanya-2006/SANKET"
 
 LOGO = "docs/assets/sih-2026-logo.png"
 
@@ -439,7 +440,9 @@ def build():
     tf = tbox(s, 0.5, 1.78, 12.33, 0.3)
     para(tf, "Data:", size=14, bold=True, color=NAVY, first=True, after=4)
     para(tf, "%d synthetic safety reports  +  %d OSHA severe-injury reports  ·  "
-             "%d human labels" % (SYNTHETIC_N, OSHA_N, GOLD_N), size=14, after=0)
+             "%d reviews by two people  ·  %d agreed gold labels"
+             % (SYNTHETIC_N, OSHA_N, 2 * (SYNTHETIC_N + OSHA_N), GOLD_N),
+         size=14, after=0)
 
     tf = tbox(s, 0.5, 2.5, 12.33, 0.3)
     para(tf, "Prototype Evaluation:", size=14, bold=True, color=NAVY, first=True, after=0)
@@ -471,8 +474,8 @@ def build():
 
     rect(s, 0.5, 6.5, 12.33, 0.42, fill=BAND, line=LINE)
     tf = tbox(s, 0.8, 6.58, 11.8, 0.28)
-    para(tf, "Live prototype:  %s        GitHub:  SANKET — AI-powered SIF precursor "
-             "detection" % LIVE_APP, size=12.5, bold=True, color=NAVY, first=True, after=0)
+    para(tf, "Live prototype:  %s        Code:  %s" % (LIVE_APP, REPO),
+         size=12.5, bold=True, color=NAVY, first=True, after=0)
 
     out = "docs/SANKET-SIH2026-Idea-Submission.pptx"
     prs.save(out)
